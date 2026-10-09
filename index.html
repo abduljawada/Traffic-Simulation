@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Traffic Lab: why traffic jams happen</title>
+<meta name="description" content="Interactive highway and city traffic simulation. Find the causes of congestion and test what reduces it.">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1>Traffic Lab</h1>
+    <p>Break the traffic, then fix it.</p>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="Scenario">
+    <button role="tab" id="tab-highway" aria-selected="true" data-mode="highway">Highway</button>
+    <button role="tab" id="tab-city" aria-selected="false" data-mode="city">City grid</button>
+  </nav>
+  <div class="transport">
+    <button id="play" class="btn" aria-label="Pause">Pause</button>
+    <div class="speed" role="group" aria-label="Simulation speed">
+      <button class="btn sm" data-speed="1">1×</button>
+      <button class="btn sm" data-speed="2">2×</button>
+      <button class="btn sm" data-speed="4">4×</button>
+      <button class="btn sm" data-speed="8">8×</button>
+    </div>
+    <button id="reset" class="btn">Reset</button>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="stage-col">
+    <div id="banner" class="banner" data-level="free" aria-live="polite">
+      <span class="dot"></span><span id="banner-text"></span>
+    </div>
+    <div class="stage">
+      <canvas id="stage" aria-label="Traffic simulation view"></canvas>
+      <div class="legend" aria-hidden="true">
+        <span>stopped</span><i class="ramp"></i><span>free flow</span>
+      </div>
+      <div id="hint" class="hint"></div>
+    </div>
+    <div id="kpis" class="kpis"></div>
+    <div class="baseline">
+      <button id="pin" class="btn sm">Pin current as baseline</button>
+      <button id="unpin" class="btn sm ghost" hidden>Clear baseline</button>
+      <span id="pin-note" class="muted"></span>
+    </div>
+    <div class="charts">
+      <figure><canvas id="c1"></canvas><figcaption id="c1t"></figcaption></figure>
+      <figure><canvas id="c2"></canvas><figcaption id="c2t"></figcaption></figure>
+      <figure><canvas id="c3"></canvas><figcaption id="c3t"></figcaption></figure>
+    </div>
+  </section>
+
+  <aside class="side">
+    <section class="panel">
+      <h2>Scenarios</h2>
+      <div id="presets" class="presets"></div>
+    </section>
+    <section class="panel">
+      <h2>Causes <small>make it worse</small></h2>
+      <div id="causes" class="controls"></div>
+    </section>
+    <section class="panel">
+      <h2>Fixes <small>make it better</small></h2>
+      <div id="fixes" class="controls"></div>
+    </section>
+    <section class="panel">
+      <h2>Diagnose</h2>
+      <p class="muted">Re-runs the current setup with each cause removed or fix added, over several random seeds, and ranks the speed gain.</p>
+      <button id="diag" class="btn primary">Run diagnosis</button>
+      <div id="diag-out" class="diag"></div>
+    </section>
+  </aside>
+</main>
+
+<section class="explain" id="explain"></section>
+<footer class="foot">
+  Models: Intelligent Driver Model + MOBIL lane changing (highway), IDM with two-phase signals (city). Simplified on purpose; see "What the model leaves out".
+</footer>
+
+<script src="js/highway.js"></script>
+<script src="js/city.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
