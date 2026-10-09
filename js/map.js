@@ -24,7 +24,10 @@
     ramp: { lanes: 1, vmax: 20, gap: 0 },
     art: { lanes: 2, vmax: 16.7, gap: 5 },
     loc: { lanes: 1, vmax: 11.1, gap: 2 },
+    ring: { lanes: 1, vmax: 8.3, gap: 0 },
   };
+  const RING_R = 18;
+  const DEFAULT_ROUNDABOUTS = ['J1000_760', 'J2200_760', 'J250_1000', 'J2850_520', 'J1700_1000'];
 
   // ---------------------------------------------------------- geometry
   const dist = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -91,7 +94,8 @@
   }
 
   // ----------------------------------------------------------- builder
-  function buildMap() {
+  function buildMap(opts) {
+    const rbts = new Set((opts && opts.roundabouts) || []);
     const nodes = {}, nodeList = [], links = [], specs = [];
     const node = (id, x, y, type, o) => {
       const n = Object.assign({ id, x, y, type, hw: 0, box: 0, in: [], out: [], uturn: false, moves: 0, st: [0, 0], ph: 0, tm: 0, off: 0 }, o || {});
@@ -123,7 +127,12 @@
 
     // signalised grid
     for (const y of AVENUES) {
-      for (const x of COLS) node(`J${x}_${y}`, x, y, 'signal', { uturn: LOCAL_COLS.includes(x) });
+      for (const x of COLS) {
+        const id = `J${x}_${y}`;
+        const eligible = !INTERCHANGES.includes(x) || false;
+        if (rbts.has(id) && eligible) node(id, x, y, 'round', { box: 32 });
+        else node(id, x, y, 'signal', { uturn: LOCAL_COLS.includes(x) });
+      }
     }
     // bridge nodes on avenues
     for (const y of AVENUES) {
@@ -273,6 +282,46 @@
       for (const M of links) if (M.from === L.to && M.to === L.from) { L.rev = M; break; }
     }
 
+    // ---------- roundabouts: replace a junction by a one-way ring with yield entries
+    const nodeFn = node;
+    for (const J of nodeList.filter((n) => n.type === 'round')) {
+      const items = [];
+      for (const A of J.in) {
+        const e = atS(A.pts, A.cum, A.len), w = [e[0] - J.x, e[1] - J.y], wh = w[0] * e[2] + w[1] * e[3];
+        const disc = wh * wh - (w[0] * w[0] + w[1] * w[1] - RING_R * RING_R), t = -wh - Math.sqrt(Math.max(0, disc));
+        const x = e[0] + e[2] * t, y = e[1] + e[3] * t;
+        items.push({ ang: Math.atan2(y - J.y, x - J.x), x, y, link: A, entry: true });
+      }
+      for (const B of J.out) {
+        const q = atS(B.pts, B.cum, 0), w = [q[0] - J.x, q[1] - J.y], wh = w[0] * q[2] + w[1] * q[3];
+        const disc = wh * wh - (w[0] * w[0] + w[1] * w[1] - RING_R * RING_R), t = wh - Math.sqrt(Math.max(0, disc));
+        const x = q[0] - q[2] * t, y = q[1] - q[3] * t;
+        items.push({ ang: Math.atan2(y - J.y, x - J.x), x, y, link: B, entry: false });
+      }
+      items.sort((a, b) => b.ang - a.ang);
+      const ids = items.map((it, k) => {
+        const n = nodeFn(`${J.id}r${k}`, it.x, it.y, it.entry ? 'rin' : 'rex', { box: 0, ring: J.id });
+        return n;
+      });
+      J.in = []; J.out = [];
+      const ringLinks = [];
+      for (let k = 0; k < items.length; k++) {
+        const a0 = items[k].ang, a1 = items[(k + 1) % items.length].ang;
+        let d = a0 - a1; if (d <= 1e-6) d += 2 * Math.PI;
+        const n = Math.max(2, Math.ceil(d / 0.12)), pts = [];
+        for (let i = 0; i <= n; i++) { const a = a0 - d * i / n; pts.push([J.x + RING_R * Math.cos(a), J.y + RING_R * Math.sin(a)]); }
+        ringLinks.push(addLink(ids[k].id, ids[(k + 1) % items.length].id, pts, { kind: 'ring', width: 5.6 }));
+      }
+      items.forEach((it, k) => {
+        const n = ids[k];
+        if (it.entry) {
+          const A = it.link; A.to = n; n.in.push(A);
+          n.yieldIn = A; n.mainIn = ringLinks[(k - 1 + items.length) % items.length];
+        } else { const B = it.link; B.from = n; n.out.push(B); }
+      });
+      J.ringIds = ids.map((n) => n.id);
+    }
+
     // ---------- movements
     const ang = (a, b) => Math.atan2(a[0] * b[1] - a[1] * b[0], a[0] * b[0] + a[1] * b[1]);
     for (const n of nodeList) {
@@ -287,7 +336,7 @@
           if (ad > 2.6 && !isU) continue;
           if (isU && !n.uturn) continue;
           if (A.kind === 'ramp' && B.kind === 'ramp') continue;
-          if (n.type !== 'signal' && ad > 1.2) continue;
+          if (n.type !== 'signal' && ad > (n.type === 'rin' || n.type === 'rex' ? 2.0 : 1.2)) continue;
           if (n.type === 'signal' && A.kind === 'hw') continue;
           const mv = { from: A, to: B, kind, node: n };
           if (A.kind === 'hw' && B.kind === 'ramp') mv.kind = 'exit';
@@ -306,6 +355,7 @@
         mv.outLane = [];
         for (let l = 0; l < A.lanes; l++) {
           let ok = true, ol;
+          if (A.kind === 'ring' || B.kind === 'ring') { mv.mask.push(true); mv.outLane.push(Math.min(l, B.lanes - 1)); continue; }
           switch (mv.kind) {
             case 'left': ok = l === A.lanes - 1; ol = B.lanes - 1; break;
             case 'right': ok = l === 0; ol = 0; break;
@@ -340,6 +390,7 @@
       if (n.type === 'merge') {
         n.mainIn = n.in.find((l) => l.kind === 'hw');
         n.rampIn = n.in.find((l) => l.kind === 'ramp');
+        n.yieldIn = n.rampIn;
       }
     }
 
@@ -430,7 +481,7 @@
     return { buildings, trees, parks, river };
   }
 
-  const api = { buildMap, buildDecor, bezier, atS, LW, KINDS, WORLD, HWY, riverX, RIVER_W, INTERCHANGES, AVENUES, COLS };
+  const api = { DEFAULT_ROUNDABOUTS, RING_R, buildMap, buildDecor, bezier, atS, LW, KINDS, WORLD, HWY, riverX, RIVER_W, INTERCHANGES, AVENUES, COLS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.MetroMap = api;
 })(typeof self !== 'undefined' ? self : this);

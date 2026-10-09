@@ -15,7 +15,7 @@
     t: { a: 0.7, b: 1.5, s0: 2.5, len: 9.5, T: 1.7 },
     c: { a: 1.5, b: 2.0, s0: 2, len: 4.5, T: 0.9 },
   };
-  const LAG = { hw: 1.4, ramp: 1.0, art: 0.8, loc: 0.6 }, CLAG = 0.15;
+  const LAG = { hw: 1.4, ramp: 1.0, art: 0.8, loc: 0.6, ring: 0.6 }, CLAG = 0.15;
   const YELLOW = 3, ALLRED = 1.2, MIN_GREEN = 7, MAX_GREEN = 45;
   const BIN = 100; // metres per speed bin (VSL)
   const WBIN = 50; // space-time bin
@@ -24,6 +24,7 @@
     demand: 70, hwShare: 0.35, tidal: 0.35, noise: 0.7, headway: 1.5, limit: 110, cruising: 0.15,
     signal: 'fixed', cycle: 70, metering: false, vsl: false, cacc: 0, reroute: false,
     transit: 0, flex: 0, rubber: true, trucks: 0.08,
+    roundabouts: MetroMap.DEFAULT_ROUNDABOUTS,
   };
 
   function mulberry32(a) {
@@ -48,7 +49,7 @@
     constructor(opts, seed) {
       this.p = Object.assign({}, DEFAULTS, opts || {});
       this.seed = seed || 1;
-      this.map = MetroMap.buildMap();
+      this.map = MetroMap.buildMap({ roundabouts: this.p.roundabouts });
       this.links = this.map.links;
       this.nodes = this.map.nodeList;
       this.sources = this.nodes.filter((n) => n.type === 'gate' && n.out.length);
@@ -115,7 +116,7 @@
     // ---------------------------------------------------------- routing
     _tt(L, dynamic) {
       const v = dynamic ? Math.max(2, Math.min(L.vlim, L.vAvg)) : L.vlim * 0.92;
-      return L.len / v + (L.to.type === 'signal' ? 8 : 0);
+      return L.len / v + (L.to.type === 'signal' ? 8 : L.to.type === 'rin' ? 3 : 0);
     }
 
     _route(dynamic) {
@@ -420,14 +421,14 @@
               if (node.type === 'signal') {
                 const st = node.st[L.group];
                 if (st === 0) stop = true; else if (st === 1) stop = stop || d > (c.v * c.v) / 7 + 1;
-              } else if (node.type === 'merge' && L.kind === 'ramp') {
+              } else if (node.yieldIn === L) {
                 const f = node.mainIn.lanesArr[0][0];
                 let yieldIt = false;
                 if (f && !f.isObs) {
                   const dA = node.mainIn.len - f.s;
                   if (dA < 160) { const tA = dA / Math.max(f.v, 3), tR = d / Math.max(c.v, 3); yieldIt = tA < tR + 2.5 && c.waitT < 3.5; }
                 }
-                if (p.metering && (t < node.meterNext || node.slow) && c.waitT < 12) yieldIt = true;
+                if (p.metering && L.kind === 'ramp' && (t < node.meterNext || node.slow) && c.waitT < 12) yieldIt = true;
                 if (yieldIt) stop = true;
                 if (d < 14 && c.v < 1.5) c.waitT += dt; else if (c.v > 4) c.waitT = 0;
               }

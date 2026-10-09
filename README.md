@@ -2,7 +2,7 @@
 
 One interactive metro in a single scheme: a 3-lane highway with three diamond interchanges and a
 river bridge, street overpasses, 2-lane avenues and arterials with signalised junctions, U-turns,
-single-lane local streets, parks, buildings and a river crossed by bridges.
+single-lane local streets, roundabouts (tap any junction to swap signals for one), parks, buildings and a river crossed by bridges.
 
 Break the traffic with causes (demand, commuter tilt, braking noise, following gap, trucks, parking
 cruisers, breakdowns, curbside disruptions, long signal cycles) and test fixes (adaptive or

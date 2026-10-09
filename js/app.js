@@ -24,6 +24,7 @@
   function linkLabel(L) {
     const mx = (L.pts[0][0] + L.pts[L.pts.length - 1][0]) / 2, my = (L.pts[0][1] + L.pts[L.pts.length - 1][1]) / 2;
     const dirs = Math.abs(L.h1[0]) > Math.abs(L.h1[1]) ? (L.h1[0] > 0 ? 'eastbound' : 'westbound') : (L.h1[1] > 0 ? 'southbound' : 'northbound');
+    if (L.kind === 'ring') return 'Roundabout';
     if (L.kind === 'hw') return `Highway 1 ${dirs}`;
     if (L.kind === 'ramp') return L.to.type === 'merge' ? 'On-ramp' : 'Off-ramp';
     if (L.kind === 'art') {
@@ -31,6 +32,11 @@
       return `${ART_NAMES[near(IX, mx)]} ${dirs}`;
     }
     return `Local street ${dirs}`;
+  }
+  function nodeLabel(n) {
+    const a = AVE_NAMES[near(AV, n.y)];
+    const x = n.x, art = IX.includes(x) ? ART_NAMES[x] : 'local street';
+    return `${a} × ${art}`;
   }
   function gateLabel(g) {
     if (g.id === 'gW') return 'the west highway gate';
@@ -54,6 +60,7 @@
     { key: 'disrupt', type: 'disrupt', label: 'Breakdowns and disruptions', tip: 'Tap any road on the map to add or remove one. Highway and avenue lanes get a stopped vehicle, small streets a slow zone.' },
   ];
   const FIXES = [
+    { key: 'roundabouts', type: 'rbt', label: 'Roundabouts', tip: 'Replace signals with yield-controlled rings. Tap any junction on the map to convert just that one.' },
     { key: 'signal', type: 'seg', label: 'Signal control', opts: [['fixed', 'Uncoordinated'], ['sync', 'Green wave'], ['adaptive', 'Adaptive']], tip: 'Green wave favours eastbound and southbound. Adaptive reacts to queues.' },
     { key: 'reroute', type: 'toggle', label: 'Live navigation rerouting', tip: 'Drivers re-plan every 20 s around slow roads. Watch traffic spread to side streets and the highway.' },
     { key: 'metering', type: 'toggle', label: 'Ramp metering', tip: 'Holds on-ramp cars when the highway lane is busy. Moves delay onto the ramp.' },
@@ -88,6 +95,7 @@
     ['Merging and exits', 'Ramp cars need gaps in the right lane, so on-ramps are bottlenecks below nominal capacity. Off-ramps are worse when the signal at the bottom cannot clear the queue: it backs up onto the highway and blocks every lane.'],
     ['Breakdowns', 'One blocked lane of three removes far more than a third of capacity, because everyone must change lanes at one spot. Rubbernecking in the open lanes adds to it. A stopped vehicle in an avenue lane is a double-parked truck.'],
     ['Signals, spillback and U-turns', 'Every red costs a stop and a restart. A green wave helps only the dominant direction, adaptive signals follow queues, and neither fixes demand above capacity. Left turns, U-turns and cruising for parking share the inner lane and slow everyone behind.'],
+    ['Roundabouts', 'Cars entering a roundabout must yield to traffic already circling, so there is no red light to wait at and conflicts are low-speed. They shine at moderate flows and with many left turns, and U-turns become a lap around the island. Under heavy one-sided flow the circulating stream can starve a side entry. Tap a junction to swap signals for a roundabout and compare.'],
     ['Navigation', 'With rerouting on, drivers leave slow roads and use the highway or parallel streets. That evens out load, and in a saturated network can also spread a jam to roads that were fine.'],
     ['Fixes that remove the sudden brake', 'Connected cars that see two vehicles ahead, speed limits that drop before a queue, and metering that keeps the main lane just under breakdown density work by smoothing flow, not by adding road.'],
     ['What the model leaves out', 'Cars and trucks only (no buses, bikes or pedestrians), two-phase signals with no turn conflicts inside junctions, one trip purpose, no induced demand, weather or incidents beyond the ones you place. Treat results as direction and rough size, not forecasts.', true],
@@ -108,6 +116,20 @@
   function params() { const p = Object.assign({}, S.net.p); Object.assign(p, S.net.disruptions()); return p; }
   function setNet(net) {
     S.net = net; S.rend.setNet(net); S.ema = {}; S.sel = null; showSel(); clearDiag(); refreshControls();
+  }
+  function allLocalJunctions() {
+    const out = [];
+    for (const y of MM.AVENUES) for (const x of MM.COLS) if (!MM.INTERCHANGES.includes(x)) out.push(`J${x}_${y}`);
+    return out;
+  }
+  function setRoundabouts(list) {
+    const p = params(); p.roundabouts = list;
+    setNet(makeNet(p));
+  }
+  function toggleRoundabout(id) {
+    const cur = new Set(S.net.p.roundabouts || []);
+    if (cur.has(id)) cur.delete(id); else cur.add(id);
+    setRoundabouts([...cur]);
   }
   function resetNet(preset) {
     if (preset) {
@@ -135,6 +157,12 @@
     } else if (c.type === 'seg') {
       w.innerHTML = `<div class="row"><span>${c.label}</span></div><div class="seg">${c.opts.map(([v, n]) => `<button class="btn sm" data-v="${v}">${n}</button>`).join('')}</div>${tip}`;
       w.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => setParam(c.key, b.dataset.v)));
+    } else if (c.type === 'rbt') {
+      w.innerHTML = `<div class="row"><span>${c.label}</span><span class="val" id="${id}-v"></span></div>
+        <div class="acts"><button class="btn sm" data-a="all">All local junctions</button><button class="btn sm" data-a="none">None</button><button class="btn sm" data-a="def">Default 5</button></div>${tip}`;
+      w.querySelector('[data-a=all]').addEventListener('click', () => setRoundabouts(allLocalJunctions()));
+      w.querySelector('[data-a=none]').addEventListener('click', () => setRoundabouts([]));
+      w.querySelector('[data-a=def]').addEventListener('click', () => setRoundabouts(MM.DEFAULT_ROUNDABOUTS.slice()));
     } else if (c.type === 'disrupt') {
       w.innerHTML = `<div class="row"><span>${c.label}</span><span class="val" id="${id}-v"></span></div>
         <div class="acts"><button class="btn sm" data-a="hw">+ Highway breakdown</button><button class="btn sm" data-a="st">+ 4 street disruptions</button><button class="btn sm" data-a="clear">Clear</button></div>${tip}`;
@@ -162,6 +190,7 @@
       if (c.type === 'toggle') el.querySelector('input').checked = !!v;
       else if (c.type === 'seg') el.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
       else if (c.type === 'disrupt') el.querySelector('.val').textContent = S.net.countDisruptions();
+      else if (c.type === 'rbt') el.querySelector('.val').textContent = (p.roundabouts || []).length;
       else {
         const x = c.pct ? Math.round(v * 100) : Math.round(v * 100) / 100;
         el.querySelector('input').value = x;
@@ -249,6 +278,15 @@
       el.innerHTML = `<div class="st"><b>${TYPE_NAME[c.type] || 'Car'}</b><button class="x" aria-label="Close">×</button></div>
         <div class="muted" id="sel-info"></div><div class="acts"><button class="btn sm" data-a="brake">Hard brake for 3 s</button></div>`;
       el.querySelector('[data-a=brake]').addEventListener('click', () => { c.brakeUntil = S.net.t + 3; c.brakeA = -4.5; });
+    } else if (s.node) {
+      const n = s.node, isR = n.type === 'round';
+      const ok = isR || n.in.every((l) => l.kind === 'art' || l.kind === 'loc');
+      el.innerHTML = `<div class="st"><b>${isR ? 'Roundabout' : 'Signalised junction'}</b><button class="x" aria-label="Close">×</button></div>
+        <div class="muted">${nodeLabel(n)}. ${isR ? 'Cars yield to traffic already circling.' : 'Two-phase traffic signal.'}</div>
+        <div class="acts">${ok ? `<button class="btn sm" data-a="rbt">${isR ? 'Restore signals' : 'Replace with a roundabout'}</button>` : ''}</div>
+        ${ok ? '<div class="muted">Rebuilds the road and restarts traffic. Pin a baseline first to compare.</div>' : ''}`;
+      const b = el.querySelector('[data-a=rbt]');
+      if (b) b.addEventListener('click', () => toggleRoundabout(n.id));
     } else {
       const L = s.link;
       const has = !!(L.obs || L.block !== null);
@@ -264,7 +302,7 @@
     updateSelInfo();
   }
   function updateSelInfo() {
-    const s = S.sel; if (!s) return;
+    const s = S.sel; if (!s || s.node) return;
     const el = $('#sel-info'); if (!el) return;
     if (s.car) {
       const c = s.car;
@@ -407,6 +445,9 @@
     if (p.cruising > 0) add('No cruising for parking', 'cause', { cruising: 0 });
     if (p.trucks > 0.02) add('Trucks off peak (2%)', 'cause', { trucks: 0.02 });
     if ((p.obstacles && p.obstacles.length) || (p.blocks && p.blocks.length)) add('Clear all disruptions', 'cause', { obstacles: [], blocks: [] });
+    const all = allLocalJunctions();
+    if (all.some((j) => !(p.roundabouts || []).includes(j))) add('Roundabouts at local junctions', 'fix', { roundabouts: all });
+    if ((p.roundabouts || []).length) add('Signals instead of roundabouts', 'fix', { roundabouts: [] });
     if (p.signal !== 'adaptive') add('Adaptive signals', 'fix', { signal: 'adaptive' });
     if (p.signal !== 'sync') add('Green-wave coordination', 'fix', { signal: 'sync' });
     if (p.cycle > 55) add('Shorter signal cycle (50 s)', 'fix', { cycle: 50 });
@@ -507,6 +548,7 @@
   }
 
   function applyVariant(v) {
+    if (v.set.roundabouts) { setRoundabouts(v.set.roundabouts); return; }
     for (const [k, val] of Object.entries(v.set)) {
       if (k === 'obstacles' || k === 'blocks') S.net.clearDisruptions();
       else S.net.set(k, val);

@@ -164,9 +164,9 @@
       // sidewalks / shoulders
       for (const L of net.links) {
         if (L.bridge) continue;
-        if (L.kind === 'hw') this._stroke(ctx, L.pts, L.lanes * LW + 5, P.shoulder);
+        if (L.kind === 'hw') this._stroke(ctx, L.pts, L.w + 5, P.shoulder);
         else if (L.kind === 'ramp') this._stroke(ctx, L.pts, L.lanes * LW + 2.2, P.shoulder);
-        else this._stroke(ctx, L.pts, L.lanes * LW + 5, P.walk);
+        else this._stroke(ctx, L.pts, L.w + 5, P.walk);
       }
       // median fill (between the two carriageways)
       for (const L of net.links) {
@@ -181,7 +181,7 @@
       // asphalt
       for (const L of net.links) {
         if (L.bridge) continue;
-        this._stroke(ctx, L.pts, L.lanes * LW, L.kind === 'hw' || L.kind === 'ramp' ? P.hw : P.asphalt);
+        this._stroke(ctx, L.pts, L.w, L.kind === 'hw' || L.kind === 'ramp' ? P.hw : P.asphalt);
       }
       // connectors at non-signal nodes
       for (const n of net.nodes) {
@@ -193,7 +193,10 @@
           const la = ramp ? 0 : (A.lanes - 1) >> 1, lb = ramp ? mv.outLane[0] : (B.lanes - 1) >> 1;
           const c = this._conn(mv, ramp ? (mv.kind === 'merge' ? 0 : 0) : la, lb);
           const wd = ramp ? LW * 1.05 : Math.max(A.lanes, B.lanes) * LW;
-          const layers = ramp ? [[wd, P.hw]] : [[wd + 5, P.shoulder], [wd, P.hw]];
+          const hwc = A.kind === 'hw' || B.kind === 'hw' || A.kind === 'ramp';
+          const ringc = A.kind === 'ring' || B.kind === 'ring';
+          const wr = ringc ? (A.kind === 'ring' ? B.w : A.w) : wd;
+          const layers = ramp ? [[wd, P.hw]] : ringc ? [[wr + 2.2, P.walk], [wr, P.asphalt]] : [[wd + 5, hwc ? P.shoulder : P.walk], [wd, hwc ? P.hw : P.asphalt]];
           for (const [lw2, col] of layers) {
             ctx.beginPath(); ctx.moveTo(c[0][0], c[0][1]); ctx.bezierCurveTo(c[1][0], c[1][1], c[2][0], c[2][1], c[3][0], c[3][1]);
             ctx.lineWidth = lw2; ctx.strokeStyle = col; ctx.lineCap = 'butt'; ctx.stroke();
@@ -210,6 +213,14 @@
         if (n.type !== 'signal') continue;
         const h = n.box - 0.5;
         ctx.fillStyle = P.asphalt; ctx.fillRect(n.x - h, n.y - h, 2 * h, 2 * h);
+      }
+      // roundabout islands
+      for (const n of net.nodes) {
+        if (n.type !== 'round') continue;
+        const R = MM.RING_R;
+        ctx.fillStyle = P.walk; ctx.beginPath(); ctx.arc(n.x, n.y, R - 2.8, 0, 7); ctx.fill();
+        ctx.fillStyle = P.park; ctx.beginPath(); ctx.arc(n.x, n.y, R - 4, 0, 7); ctx.fill();
+        if (z > 0.3) { ctx.fillStyle = P.tree; ctx.beginPath(); ctx.arc(n.x - 3, n.y + 2, 4.5, 0, 7); ctx.arc(n.x + 4, n.y - 3, 3.5, 0, 7); ctx.fill(); }
       }
       // hw barrier (median)
       for (const L of net.links) {
@@ -274,6 +285,15 @@
 
     _junctionMarks(ctx, net, z) {
       const P = this.pal;
+      for (const n of net.nodes) {
+        if (n.type !== 'rin') continue;
+        const L = n.yieldIn, e = MM.atS(L.pts, L.cum, L.len), hx = e[2], hy = e[3], px = -hy, py = hx, wdt = L.w;
+        ctx.setLineDash([0.9, 0.9]);
+        ctx.beginPath(); ctx.moveTo(e[0] - hx * 1.5 - px * wdt / 2, e[1] - hy * 1.5 - py * wdt / 2); ctx.lineTo(e[0] - hx * 1.5 + px * wdt / 2, e[1] - hy * 1.5 + py * wdt / 2);
+        ctx.lineWidth = Math.max(0.7, 1.8 / z); ctx.strokeStyle = P.line; ctx.stroke(); ctx.setLineDash([]);
+        const cx = e[0] - hx * 5, cy = e[1] - hy * 5; ctx.lineWidth = Math.max(0.6, 1.6 / z);
+        for (let t = -wdt / 2 + 0.9; t < wdt / 2; t += 1.8) { ctx.beginPath(); ctx.moveTo(cx + px * t - hx * 1.4, cy + py * t - hy * 1.4); ctx.lineTo(cx + px * t + hx * 1.4, cy + py * t + hy * 1.4); ctx.stroke(); }
+      }
       for (const n of net.nodes) {
         if (n.type !== 'signal') continue;
         for (const L of n.in) {
@@ -348,7 +368,7 @@
         for (const L of net.links) {
           if (L.bridge && z > 0.5) continue;
           const col = speedColor(L.ratio * 1.0);
-          this._stroke(ctx, L.pts, Math.max(L.lanes * LW, 5 / z) * (z < 0.5 ? 1.0 : 0.9), col);
+          this._stroke(ctx, L.pts, Math.max(L.w, 5 / z) * (z < 0.5 ? 1.0 : 0.9), col);
         }
         ctx.globalAlpha = 1;
       }
@@ -359,12 +379,12 @@
       // bridges
       for (const L of net.links) {
         if (!L.bridge) continue;
-        const w = L.lanes * LW;
+        const w = L.w;
         this._stroke(ctx, L.pts.map((q) => [q[0] + 3, q[1] + 4]), w + 5, P.shadow);
       }
       for (const L of net.links) {
         if (!L.bridge) continue;
-        const w = L.lanes * LW;
+        const w = L.w;
         this._stroke(ctx, L.pts, w + 2.6, P.rail);
         this._stroke(ctx, L.pts, w + 1.2, P.deck);
         this._stroke(ctx, L.pts, w, L.kind === 'hw' ? P.hw : P.asphalt);
@@ -488,9 +508,11 @@
       ctx.lineWidth = 2 * px;
       if (s.car && s.pos) {
         ctx.strokeStyle = '#4aa8ff'; ctx.beginPath(); ctx.arc(s.pos[0], s.pos[1], 9 * px, 0, 7); ctx.stroke();
+      } else if (s.node) {
+        ctx.strokeStyle = '#4aa8ff'; ctx.beginPath(); ctx.arc(s.node.x, s.node.y, Math.max(s.node.box + 4, 12 * px), 0, 7); ctx.stroke();
       } else if (s.link) {
         ctx.strokeStyle = '#4aa8ff'; ctx.globalAlpha = 0.75;
-        this._stroke(ctx, s.link.pts, s.link.lanes * LW + 1.5, 'rgba(74,168,255,.35)');
+        this._stroke(ctx, s.link.pts, s.link.w + 1.5, 'rgba(74,168,255,.35)');
         ctx.globalAlpha = 1;
         const p = MM.atS(s.link.pts, s.link.cum, s.at);
         ctx.beginPath(); ctx.arc(p[0], p[1], 7 * px, 0, 7); ctx.stroke();
@@ -503,6 +525,10 @@
       let best = null, bd = (14 / z) ** 2;
       for (const h of this.hits) { const d = (h[0] - wx) ** 2 + (h[1] - wy) ** 2; if (d < bd) { bd = d; best = h[2]; } }
       if (best) return { car: best };
+      for (const n of this.net.nodes) {
+        if ((n.type !== 'signal' && n.type !== 'round') || n.box < 8) continue;
+        if (Math.hypot(n.x - wx, n.y - wy) < Math.max(n.box * 0.85, 12 / z)) return { node: n };
+      }
       let bl = null, bs = 0, bd2 = (Math.max(12 / z, 8)) ** 2;
       this.net.links.forEach((L, i) => {
         for (const q of this.samples[i]) {
