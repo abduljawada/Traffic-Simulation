@@ -42,7 +42,7 @@ Map: drag to pan, wheel or pinch to zoom, tap a road, junction or car for detail
 
 | Quantity | Model | Target |
 |---|---|---|
-| Freeway capacity | about 2,100 veh/h/lane at 30 veh/km/lane | 1,900-2,200 |
+| Freeway capacity | about 2,100 veh/h/lane (flat from 30 to 40 veh/km/lane) | 1,900-2,200 |
 | Backward wave speed | about 22 km/h | 15-25 |
 | Signal saturation flow | about 1,800 veh/h of green/lane | 1,800-1,900 |
 | Start-up delay of first car | 1.8 s | about 2 |
