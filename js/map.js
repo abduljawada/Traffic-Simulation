@@ -26,7 +26,7 @@
     loc: { lanes: 1, vmax: 11.1, gap: 2 },
     ring: { lanes: 1, vmax: 8.3, gap: 0 },
   };
-  const RING_R = 18;
+  const RING_R = 18, RING_R2 = 27;
   const DEFAULT_ROUNDABOUTS = ['J1000_760', 'J2200_760', 'J250_1000', 'J2850_520', 'J1700_1000'];
 
   // ---------------------------------------------------------- geometry
@@ -95,7 +95,8 @@
 
   // ----------------------------------------------------------- builder
   function buildMap(opts) {
-    const rbts = new Set((opts && opts.roundabouts) || []);
+    const rbts = new Set(), rbt2 = new Set();
+    for (const e of ((opts && opts.roundabouts) || [])) { const [id, k] = String(e).split('#'); rbts.add(id); if (k === '2') rbt2.add(id); }
     const nodes = {}, nodeList = [], links = [], specs = [];
     const node = (id, x, y, type, o) => {
       const n = Object.assign({ id, x, y, type, hw: 0, box: 0, in: [], out: [], uturn: false, moves: 0, st: [0, 0], ph: 0, tm: 0, off: 0 }, o || {});
@@ -130,7 +131,7 @@
       for (const x of COLS) {
         const id = `J${x}_${y}`;
         const eligible = !INTERCHANGES.includes(x) || false;
-        if (rbts.has(id) && eligible) node(id, x, y, 'round', { box: 32 });
+        if (rbts.has(id) && eligible) node(id, x, y, 'round', { box: rbt2.has(id) ? 42 : 32, rl: rbt2.has(id) ? 2 : 1 });
         else node(id, x, y, 'signal', { uturn: LOCAL_COLS.includes(x) });
       }
     }
@@ -238,6 +239,7 @@
         kind: props.kind, lanes: props.lanes || k.lanes, vmax: props.vmax || k.vmax, bridge: !!props.bridge,
         name: props.name || '', moves: [], lanesArr: null, twoWay: !!props.twoWay,
       };
+      L.w = props.width || L.lanes * LW;
       const h0 = atS(pts, c, 0), h1 = atS(pts, c, L.len);
       L.h0 = [h0[2], h0[3]]; L.h1 = [h1[2], h1[3]];
       L.group = Math.abs(L.h1[0]) > Math.abs(L.h1[1]) ? 0 : 1;
@@ -288,17 +290,18 @@
       const items = [];
       for (const A of J.in) {
         const e = atS(A.pts, A.cum, A.len), w = [e[0] - J.x, e[1] - J.y], wh = w[0] * e[2] + w[1] * e[3];
-        const disc = wh * wh - (w[0] * w[0] + w[1] * w[1] - RING_R * RING_R), t = -wh - Math.sqrt(Math.max(0, disc));
+        const RR = J.rl === 2 ? RING_R2 : RING_R, disc = wh * wh - (w[0] * w[0] + w[1] * w[1] - RR * RR), t = -wh - Math.sqrt(Math.max(0, disc));
         const x = e[0] + e[2] * t, y = e[1] + e[3] * t;
         items.push({ ang: Math.atan2(y - J.y, x - J.x), x, y, link: A, entry: true });
       }
       for (const B of J.out) {
         const q = atS(B.pts, B.cum, 0), w = [q[0] - J.x, q[1] - J.y], wh = w[0] * q[2] + w[1] * q[3];
-        const disc = wh * wh - (w[0] * w[0] + w[1] * w[1] - RING_R * RING_R), t = wh - Math.sqrt(Math.max(0, disc));
+        const RR = J.rl === 2 ? RING_R2 : RING_R, disc = wh * wh - (w[0] * w[0] + w[1] * w[1] - RR * RR), t = wh - Math.sqrt(Math.max(0, disc));
         const x = q[0] - q[2] * t, y = q[1] - q[3] * t;
         items.push({ ang: Math.atan2(y - J.y, x - J.x), x, y, link: B, entry: false });
       }
       items.sort((a, b) => b.ang - a.ang);
+      const RR0 = J.rl === 2 ? RING_R2 : RING_R;
       const ids = items.map((it, k) => {
         const n = nodeFn(`${J.id}r${k}`, it.x, it.y, it.entry ? 'rin' : 'rex', { box: 0, ring: J.id });
         return n;
@@ -309,8 +312,8 @@
         const a0 = items[k].ang, a1 = items[(k + 1) % items.length].ang;
         let d = a0 - a1; if (d <= 1e-6) d += 2 * Math.PI;
         const n = Math.max(2, Math.ceil(d / 0.12)), pts = [];
-        for (let i = 0; i <= n; i++) { const a = a0 - d * i / n; pts.push([J.x + RING_R * Math.cos(a), J.y + RING_R * Math.sin(a)]); }
-        ringLinks.push(addLink(ids[k].id, ids[(k + 1) % items.length].id, pts, { kind: 'ring', width: 5.6 }));
+        for (let i = 0; i <= n; i++) { const a = a0 - d * i / n; pts.push([J.x + RR0 * Math.cos(a), J.y + RR0 * Math.sin(a)]); }
+        ringLinks.push(addLink(ids[k].id, ids[(k + 1) % items.length].id, pts, { kind: 'ring', lanes: J.rl || 1, width: J.rl === 2 ? 8.6 : 5.6 }));
       }
       items.forEach((it, k) => {
         const n = ids[k];
@@ -320,6 +323,8 @@
         } else { const B = it.link; B.from = n; n.out.push(B); }
       });
       J.ringIds = ids.map((n) => n.id);
+      J.ringLinks = ringLinks;
+      for (const n of ids) n.ringNode = J;
     }
 
     // ---------- movements
@@ -408,7 +413,29 @@
     };
     const hwChain = chain('gW');
 
-    return { nodes, nodeList, links, hwChain, riverX, RIVER_W, WORLD, KINDS, LW, HWY, INTERCHANGES, AVENUES, COLS, laneOff };
+    // ---------- land use zones (trip origins/destinations with curb parking) and bus stops
+    const zoneAt = (x, y) => {
+      if (x > 1000 && x < 2200 && y > 480 && y < 1010) return 'down';
+      if (y <= 770) return 'work';
+      return 'res';
+    };
+    const zones = { res: [], work: [], down: [], shop: [] };
+    for (const L of links) {
+      if (L.kind !== 'art' && L.kind !== 'loc') continue;
+      if (L.bridge || L.len < 90 || (L.from.type === 'gate' && L.to.type === 'gate')) continue;
+      const mid = atS(L.pts, L.cum, L.len / 2);
+      let z = zoneAt(mid[0], mid[1]);
+      if (z === 'down' && L.kind === 'art' && Math.abs(L.h1[0]) > Math.abs(L.h1[1])) z = 'shop';
+      L.zone = z;
+      zones[z].push(L);
+      L.parkable = true;
+    }
+    for (const L of links) {
+      if (L.kind !== 'art' || L.bridge || L.len < 170 || L.from.type === 'gate' && L.to.type === 'gate') continue;
+      L.stopS = L.len * 0.55;
+      if (Math.abs(L.h1[0]) > Math.abs(L.h1[1]) && L.lanes >= 2) L.busLaneOK = true;
+    }
+    return { nodes, nodeList, links, hwChain, zones, zoneAt, riverX, RIVER_W, WORLD, KINDS, LW, HWY, INTERCHANGES, AVENUES, COLS, laneOff };
   }
 
   function bezier(p0, p1, p2, p3, t) {
@@ -461,7 +488,7 @@
         const rad = Math.max(w, h) * 0.62;
         if (near(x + w / 2, y + h / 2, rad)) continue;
         const tall = rnd();
-        buildings.push({ x, y, w, h, z: tall < 0.1 ? 3 : tall < 0.4 ? 2 : 1, tone: rnd() });
+        buildings.push({ x, y, w, h, z: tall < 0.1 ? 3 : tall < 0.4 ? 2 : 1, tone: rnd(), zone: map.zoneAt(x + w / 2, y + h / 2) });
       }
     }
     // trees along the highway corridor and parks
@@ -481,7 +508,7 @@
     return { buildings, trees, parks, river };
   }
 
-  const api = { DEFAULT_ROUNDABOUTS, RING_R, buildMap, buildDecor, bezier, atS, LW, KINDS, WORLD, HWY, riverX, RIVER_W, INTERCHANGES, AVENUES, COLS };
+  const api = { DEFAULT_ROUNDABOUTS, RING_R, RING_R2, buildMap, buildDecor, bezier, atS, LW, KINDS, WORLD, HWY, riverX, RIVER_W, INTERCHANGES, AVENUES, COLS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.MetroMap = api;
 })(typeof self !== 'undefined' ? self : this);
