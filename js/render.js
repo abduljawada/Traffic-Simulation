@@ -12,13 +12,15 @@
     dark: {
       ground: '#171c22', park: '#1d3526', tree: '#2c5d3d', water: '#1c4a70', bank: '#2a3a46', waterHi: '#2f6f9e',
       walk: '#39414b', asphalt: '#2c3239', hw: '#262b32', shoulder: '#3d444e', line: 'rgba(235,240,246,.75)', dash: 'rgba(235,240,246,.45)',
-      yellow: '#d9ab32', median: '#2d4a33', barrier: '#6a727d', deck: '#4a525c', rail: '#9aa3af', shadow: 'rgba(0,0,0,.38)',
+      stop: '#f2a33a', yellow: '#d9ab32', median: '#2d4a33', barrier: '#6a727d', deck: '#4a525c', rail: '#9aa3af', shadow: 'rgba(0,0,0,.38)',
+      land: { res: ['#3f5f86', '#4d739f'], work: ['#6b4f86', '#7d5d9a'], down: ['#8a6a2f', '#a07b37'], shop: ['#2f7a62', '#3b9277'] },
       bld: ['#394251', '#434e60', '#2f3744'], roof: ['#4a5567', '#56637a', '#3b4455'], label: '#cdd6e0', halo: 'rgba(15,19,24,.85)',
     },
     light: {
       ground: '#e5e8eb', park: '#cde3c6', tree: '#8bbd86', water: '#9ec9e6', bank: '#d9d2bd', waterHi: '#bddaee',
       walk: '#d3d7dc', asphalt: '#7d858f', hw: '#6f7782', shoulder: '#9aa1aa', line: 'rgba(255,255,255,.9)', dash: 'rgba(255,255,255,.6)',
-      yellow: '#e3b73c', median: '#a9c9a0', barrier: '#bfc4cb', deck: '#9199a3', rail: '#5d6671', shadow: 'rgba(40,50,60,.28)',
+      stop: '#d9871c', yellow: '#e3b73c', median: '#a9c9a0', barrier: '#bfc4cb', deck: '#9199a3', rail: '#5d6671', shadow: 'rgba(40,50,60,.28)',
+      land: { res: ['#9db8d9', '#b4cae3'], work: ['#c3aedb', '#d3c2e6'], down: ['#e1c58c', '#ebd7a9'], shop: ['#9ad3bd', '#b3e0cf'] },
       bld: ['#c4cad3', '#d3d8df', '#b6bdc8'], roof: ['#d6dbe2', '#e4e8ed', '#c8ced8'], label: '#2a3440', halo: 'rgba(240,243,246,.85)',
     }
   };
@@ -153,9 +155,10 @@
       for (const b of D.buildings) {
         if (!vis(b.x, b.y, b.x + b.w, b.y + b.h)) continue;
         const k = b.tone < 0.34 ? 0 : b.tone < 0.67 ? 1 : 2;
+        const lu = this.landUse ? P.land[b.zone] : null;
         if (detail) { ctx.fillStyle = P.shadow; ctx.fillRect(b.x + b.z * 2.2, b.y + b.z * 2.8, b.w, b.h); }
-        ctx.fillStyle = P.bld[k]; ctx.fillRect(b.x, b.y, b.w, b.h);
-        if (detail) { ctx.fillStyle = P.roof[k]; ctx.fillRect(b.x + 2, b.y + 2, b.w - 4 - b.z, b.h - 4 - b.z); }
+        ctx.fillStyle = lu ? lu[0] : P.bld[k]; ctx.fillRect(b.x, b.y, b.w, b.h);
+        if (detail) { ctx.fillStyle = lu ? lu[1] : P.roof[k]; ctx.fillRect(b.x + 2, b.y + 2, b.w - 4 - b.z, b.h - 4 - b.z); }
       }
       if (z > 0.3) {
         ctx.fillStyle = P.tree;
@@ -217,9 +220,9 @@
       // roundabout islands
       for (const n of net.nodes) {
         if (n.type !== 'round') continue;
-        const R = MM.RING_R;
-        ctx.fillStyle = P.walk; ctx.beginPath(); ctx.arc(n.x, n.y, R - 2.8, 0, 7); ctx.fill();
-        ctx.fillStyle = P.park; ctx.beginPath(); ctx.arc(n.x, n.y, R - 4, 0, 7); ctx.fill();
+        const R = n.rl === 2 ? MM.RING_R2 : MM.RING_R, hw = n.rl === 2 ? 4.9 : 2.8;
+        ctx.fillStyle = P.walk; ctx.beginPath(); ctx.arc(n.x, n.y, R - hw, 0, 7); ctx.fill();
+        ctx.fillStyle = P.park; ctx.beginPath(); ctx.arc(n.x, n.y, R - hw - 1.2, 0, 7); ctx.fill();
         if (z > 0.3) { ctx.fillStyle = P.tree; ctx.beginPath(); ctx.arc(n.x - 3, n.y + 2, 4.5, 0, 7); ctx.arc(n.x + 4, n.y - 3, 3.5, 0, 7); ctx.fill(); }
       }
       // hw barrier (median)
@@ -250,6 +253,15 @@
           this._markings(ctx, L, z);
         }
         if (z > 0.5) this._junctionMarks(ctx, net, z);
+        if (z > 0.35) {
+          for (const L of net.links) {
+            if (L.stopS === undefined || L.bridge) continue;
+            const p = MM.atS(L.pts, L.cum, L.stopS), o = L.w / 2 + 3.2;
+            ctx.save(); ctx.translate(p[0] - p[3] * o, p[1] + p[2] * o); ctx.rotate(Math.atan2(p[3], p[2]));
+            ctx.fillStyle = P.stop; ctx.fillRect(-3, -0.9, 6, 1.8); ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillRect(-2.6, -0.5, 5.2, 0.5);
+            ctx.restore();
+          }
+        }
       }
       ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
@@ -339,8 +351,8 @@
 
     // ---------------------------------------------------------- dynamic
     carPos(c) {
-      const L = c.link, off = laneOff(L, c.lane);
-      if (c.mv && c.s < 0) {
+      const L = c.link, off = c.sep ? L.w / 2 + 1.3 : laneOff(L, c.lane);
+      if (c.mv && c.s < 0 && !c.sep) {
         const mv = c.mv, t = Math.max(0, Math.min(1, (c.s + mv.len) / mv.len));
         const k = this._conn(mv, c.lane0 === undefined ? c.lane : c.lane0, c.lane);
         const b = MM.bezier(k[0], k[1], k[2], k[3], t), b2 = MM.bezier(k[0], k[1], k[2], k[3], Math.min(1, t + 0.02));
@@ -375,6 +387,12 @@
         ctx.globalAlpha = 1;
       }
 
+      // bus lanes (painted) and pedestrians
+      if (net.p.busLanes) for (const L of net.links) {
+        if (!L.busBan || L.bridge) continue;
+        this._stroke(ctx, this._offset(L, ((L.lanes - 1) / 2) * LW), LW * 0.98, 'rgba(206,64,60,.55)');
+      }
+      this._peds(ctx, z);
       // cars on ground-level links
       this.hits = [];
       this._cars(ctx, false, z, inView, now);
@@ -415,15 +433,22 @@
       const px = 1 / z;
       for (const L of net.links) {
         if (!!L.bridge !== bridgePass) continue;
-        for (const arr of L.lanesArr) for (const c of arr) {
+        const all = L.bikes.length ? [...L.lanesArr, L.bikes] : L.lanesArr;
+        for (const arr of all) for (const c of arr) {
           if (c.isObs) continue;
           const [x, y, ang] = this.carPos(c);
           if (!inView(x, y)) continue;
-          const len = Math.max(c.len, 4.2 * px), wid = Math.max(c.type === 't' ? 2.5 : 1.9, 2.1 * px);
+          const len = Math.max(c.len, (c.type === 'k' ? 2.6 : 4.2) * px), wid = Math.max(c.type === 't' || c.type === 'b' ? 2.5 : c.type === 'k' ? 0.8 : 1.9, (c.type === 'k' ? 1.4 : 2.1) * px);
           this.hits.push([x, y, c]);
           ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
           const col = speedColor(c.v / Math.max(8, c.link.vlim * 0.95));
-          if (c.type === 't') {
+          if (c.type === 'k') {
+            ctx.fillStyle = '#35c27a'; ctx.fillRect(-len / 2, -wid / 2, len, wid);
+          } else if (c.type === 'b') {
+            ctx.fillStyle = '#f2a33a'; ctx.fillRect(-len / 2, -wid / 2, len, wid);
+            ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.fillRect(-len / 2 + 1, -wid / 2 + 0.35, len - 2, 0.55); ctx.fillRect(-len / 2 + 1, wid / 2 - 0.9, len - 2, 0.55);
+            ctx.fillStyle = col; ctx.fillRect(len / 2 - 2.2, -wid / 2, 2.2, wid);
+          } else if (c.type === 't') {
             ctx.fillStyle = '#c9ced6'; ctx.fillRect(-len / 2, -wid / 2, len * 0.72, wid);
             ctx.fillStyle = col; ctx.fillRect(len * 0.2, -wid / 2, len * 0.3, wid);
           } else {
@@ -439,6 +464,22 @@
           else if (c.wander > 0) { ctx.strokeStyle = '#c77dff'; ctx.lineWidth = Math.max(0.3, px * 1.1); ctx.strokeRect(-len / 2, -wid / 2, len, wid); }
           ctx.restore();
           if (this.sel && this.sel.car === c) this.sel.pos = [x, y];
+        }
+      }
+    }
+
+    _peds(ctx, z) {
+      if (z < 0.5) return;
+      const t = this.net.t, px = 1 / z;
+      for (const B of this.net.links) {
+        if (!(B.pedUntil > t) || B.kind === 'hw' || B.kind === 'ramp') continue;
+        const f = (t - B.pedStart) / (B.pedUntil - B.pedStart), dir = (Math.floor(B.pedStart) & 1) ? 1 : -1;
+        const p = MM.atS(B.pts, B.cum, 3.6), half = B.w / 2 + 2.2;
+        const lat = dir * (-half + 2 * half * f);
+        ctx.fillStyle = '#ffd36b';
+        for (let i = 0; i < 3; i++) {
+          const o = lat + dir * i * 1.1, along = (i - 1) * 0.9;
+          ctx.beginPath(); ctx.arc(p[0] - p[3] * o + p[2] * along, p[1] + p[2] * o + p[3] * along, Math.max(0.45, 2 * px), 0, 7); ctx.fill();
         }
       }
     }

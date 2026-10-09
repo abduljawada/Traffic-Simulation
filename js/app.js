@@ -12,7 +12,6 @@
     for (const k of ['panel', 'line', 'text', 'muted', 'accent', 'good', 'warn', 'bad']) C[k] = cs.getPropertyValue('--' + k).trim();
     const explicit = document.documentElement.dataset.theme;
     const light = explicit ? explicit === 'light' : matchMedia('(prefers-color-scheme: light)').matches;
-    if (S && S.rend) S.rend.setTheme(light ? 'light' : 'dark');
     return light ? 'light' : 'dark';
   }
 
@@ -45,64 +44,84 @@
     if (g.id.startsWith('gN')) return `${ART_NAMES[g.x]} north end`;
     return `the south end at x=${g.x}`;
   }
+  const fmtClock = (s) => { const m = Math.floor(s / 60) % 1440; return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; };
 
   // ---------------------------------------------------------- controls
   const CAUSES = [
-    { key: 'demand', label: 'Trips entering', min: 20, max: 140, step: 5, fmt: (v) => `${v} /min`, tip: 'Cars entering the map every minute. Roads jam when demand crosses capacity.' },
-    { key: 'hwShare', label: 'Trips starting on the highway', min: 10, max: 70, step: 5, pct: true, fmt: (v) => `${v}%`, tip: 'The rest start on city streets. Highway trips can exit at any interchange.' },
-    { key: 'tidal', label: 'Commuter tilt', min: 0, max: 100, step: 10, pct: true, fmt: (v) => `${v}%`, tip: 'How lopsided rush hour is toward the south and east. High tilt overloads a few exits.' },
+    { type: 'head', label: 'Demand' },
+    { key: 'demand', label: 'Trips entering', min: 20, max: 140, step: 5, fmt: (v) => `${v} /min`, tip: 'Trips starting every minute (cars, trucks, bikes). Roads jam when demand crosses capacity.' },
+    { key: 'profile', type: 'seg', label: 'Time of day', opts: [['steady', 'Steady'], ['peak', 'Peak hour']], tip: 'Peak hour builds up, peaks after 25 min and eases off. Recovery matters as much as the peak.' },
+    { key: 'internalShare', label: 'Trips inside the city', min: 10, max: 80, step: 5, pct: true, fmt: (v) => `${v}%`, tip: 'Between homes, offices, shops and downtown. The rest come in from, go out to, or pass through the map edges.' },
+    { key: 'hwShare', label: 'Edge trips starting on the highway', min: 10, max: 70, step: 5, pct: true, fmt: (v) => `${v}%`, tip: 'The rest enter on city streets.' },
+    { key: 'tidal', label: 'Commuter tilt', min: 0, max: 100, step: 10, pct: true, fmt: (v) => `${v}%`, tip: 'How lopsided edge traffic is toward the south and east. High tilt overloads a few exits.' },
+    { key: 'elasticity', label: 'Demand response to delays', min: 0, max: 60, step: 5, pct: true, fmt: (v) => (v ? `${v}%` : 'off'), tip: 'When trips get slower some people stay home or switch. Faster roads attract new trips back (induced demand).' },
+    { key: 'cruising', label: 'Cannot find curb parking', min: 0, max: 70, step: 5, pct: true, fmt: (v) => `${v}% of arrivals`, tip: 'These drivers pass the destination, circle the block and try again. Purple outline.' },
+    { type: 'head', label: 'Drivers and vehicles' },
     { key: 'noise', label: 'Braking noise', min: 0, max: 1, step: 0.05, fmt: (v) => v.toFixed(2), tip: 'Random over-braking and distraction: the seed of phantom jams.' },
-    { key: 'headway', label: 'Following gap', min: 0.8, max: 2.5, step: 0.1, fmt: (v) => `${v.toFixed(1)} s`, tip: 'Short gaps raise capacity but leave no room for a brake tap.' },
-    { key: 'trucks', label: 'Trucks', min: 0, max: 25, step: 1, pct: true, fmt: (v) => `${v}%`, tip: 'Slow, long, slow to accelerate. They form moving bottlenecks.' },
-    { key: 'cruising', label: 'Cruising for parking', min: 0, max: 60, step: 5, pct: true, fmt: (v) => `${v}% of street trips`, tip: 'Purple-outlined cars circle blocks, take extra turns and U-turns.' },
+    { key: 'headway', label: 'Following gap', min: 0.7, max: 2.2, step: 0.1, fmt: (v) => `${v.toFixed(1)} s`, tip: 'Average desired time gap. Short gaps raise capacity but leave no room for a brake tap.' },
+    { key: 'trucks', label: 'Trucks on edge trips', min: 0, max: 25, step: 1, pct: true, fmt: (v) => `${v}%`, tip: 'Slow, long, slow to accelerate. They form moving bottlenecks.' },
+    { key: 'peds', label: 'Pedestrians at crosswalks', min: 0, max: 15, step: 1, fmt: (v) => `${v} /min each`, tip: 'Turning cars must yield. Left turns also wait for gaps in oncoming traffic.' },
+    { type: 'head', label: 'Signals and incidents' },
+    { key: 'cycle', label: 'Signal cycle (untuned and green wave)', min: 30, max: 150, step: 5, fmt: (v) => `${v} s`, tip: 'Long cycles mean long reds and queues that spill back.' },
+    { key: 'incidents', label: 'Random incidents', min: 0, max: 8, step: 0.5, fmt: (v) => (v ? `${v} /hour` : 'none'), tip: 'A lane blocked on the highway or an avenue, cleared after 3 to 50 minutes.' },
     { key: 'rubber', type: 'toggle', label: 'Rubbernecking', tip: 'Drivers in open lanes slow down to look at a breakdown.' },
-    { key: 'cycle', label: 'Signal cycle', min: 30, max: 150, step: 5, fmt: (v) => `${v} s`, tip: 'Long cycles mean long reds and queues that spill back.' },
-    { key: 'disrupt', type: 'disrupt', label: 'Breakdowns and disruptions', tip: 'Tap any road on the map to add or remove one. Highway and avenue lanes get a stopped vehicle, small streets a slow zone.' },
+    { key: 'disrupt', type: 'disrupt', label: 'Your own disruptions', tip: 'Tap any road on the map to add one. They stay until you remove them.' },
   ];
   const FIXES = [
-    { key: 'roundabouts', type: 'rbt', label: 'Roundabouts', tip: 'Replace signals with yield-controlled rings. Tap any junction on the map to convert just that one.' },
-    { key: 'signal', type: 'seg', label: 'Signal control', opts: [['fixed', 'Uncoordinated'], ['sync', 'Green wave'], ['adaptive', 'Adaptive']], tip: 'Green wave favours eastbound and southbound. Adaptive reacts to queues.' },
-    { key: 'reroute', type: 'toggle', label: 'Live navigation rerouting', tip: 'Drivers re-plan every 20 s around slow roads. Watch traffic spread to side streets and the highway.' },
+    { type: 'head', label: 'Signals and junctions' },
+    { key: 'signal', type: 'seg', label: 'Signal control', opts: [['untuned', 'Untuned'], ['webster', 'Tuned'], ['sync', 'Green wave'], ['adaptive', 'Adaptive']], tip: 'Tuned = cycle and green split set from expected flows (Webster). Green wave favours east and south. Adaptive follows queues.' },
+    { key: 'roundabouts', type: 'rbt', label: 'Roundabouts', tip: 'Replace signals with yield-controlled rings. Tap a junction on the map to convert just that one.' },
+    { type: 'head', label: 'Highway' },
     { key: 'metering', type: 'toggle', label: 'Ramp metering', tip: 'Holds on-ramp cars when the highway lane is busy. Moves delay onto the ramp.' },
     { key: 'vsl', type: 'toggle', label: 'Variable speed limits', tip: 'Gantries slow highway traffic before a queue so it arrives smoothly.' },
     { key: 'cacc', label: 'Connected automated cars', min: 0, max: 100, step: 5, pct: true, fmt: (v) => `${v}%`, tip: 'React to the two cars ahead, keep 0.9 s gaps, never over-brake. Cyan outline.' },
     { key: 'limit', label: 'Highway speed limit', min: 60, max: 130, step: 5, fmt: (v) => `${v} km/h`, tip: 'Lower speeds shrink shockwaves; too low wastes capacity.' },
-    { key: 'transit', label: 'Shift to transit / bike / carpool', min: 0, max: 50, step: 5, pct: true, fmt: (v) => `${v}%`, tip: 'Fewer cars on the same roads.' },
+    { key: 'fastClear', type: 'toggle', label: 'Faster incident clearance', tip: 'Tow trucks and patrols halve the time a lane stays blocked.' },
+    { type: 'head', label: 'Drivers, transit and bikes' },
+    { key: 'navShare', label: 'Drivers using live navigation', min: 0, max: 100, step: 5, pct: true, fmt: (v) => `${v}%`, tip: 'Each cohort re-plans every 20 s from smoothed travel times. Too many at once can herd onto one detour.' },
+    { key: 'busFreq', label: 'Bus frequency per route', min: 0, max: 20, step: 1, fmt: (v) => (v ? `${v} /hour` : 'no buses'), tip: 'Buses stop in the right lane for 12 to 26 s and carry 28 people.' },
+    { key: 'busLanes', type: 'toggle', label: 'Bus lanes on avenues', tip: 'The right lane is kept for buses. Cars lose a lane.' },
+    { key: 'bikes', label: 'Share of trips by bike', min: 0, max: 20, step: 1, pct: true, fmt: (v) => `${v}%`, tip: 'Bikes ride at 19 km/h in the right lane of local trips and take cars off the road.' },
+    { key: 'bikeLanes', type: 'toggle', label: 'Protected bike lanes', tip: 'Bikes get their own track beside the road and stop slowing cars.' },
+    { key: 'transit', label: 'Shift to transit / carpool', min: 0, max: 50, step: 5, pct: true, fmt: (v) => `${v}%`, tip: 'Fewer cars on the same roads.' },
     { key: 'flex', label: 'Staggered hours / remote work', min: 0, max: 40, step: 5, pct: true, fmt: (v) => `${v}%`, tip: 'Flattens the peak instead of widening the road.' },
   ];
 
   const PRESETS = [
     { name: 'Rush hour', p: {} },
-    { name: 'Free flow', p: { demand: 35, noise: 0.3 } },
-    { name: 'Highway crash', p: { demand: 80, hwShare: 0.5, tidal: 0.3 }, after: (n) => { const L = n.links.find((l) => l.from.id === 'DE650' && l.to.id === 'ME650'); n.toggleDisruption(L, 330); } },
-    { name: 'Delivery chaos', p: { demand: 75 }, after: (n) => n.randomDisruptions(9, ['art', 'loc']) },
-    { name: 'Gridlock', p: { demand: 110, cycle: 110, cruising: 0.4, tidal: 0.7 } },
-    { name: 'Smart metro', p: { demand: 85, signal: 'adaptive', cycle: 60, reroute: true, metering: true, vsl: true, cacc: 0.3, transit: 0.15, cruising: 0.05 } },
+    { name: 'Peak hour', p: { profile: 'peak', demand: 80 } },
+    { name: 'Free flow', p: { demand: 30, noise: 0.25, incidents: 0 } },
+    { name: 'Highway crash', p: { demand: 100, hwShare: 0.7, internalShare: 0.15, tidal: 0.3, incidents: 0 }, after: (n) => { const L = n.links.find((l) => l.from.id === 'DE650' && l.to.id === 'ME650'); n.toggleDisruption(L, 330); } },
+    { name: 'Delivery chaos', p: { demand: 60 }, after: (n) => n.randomDisruptions(9, ['art', 'loc']) },
+    { name: 'Gridlock', p: { demand: 105, cycle: 110, signal: 'untuned', cruising: 0.5, tidal: 0.7 } },
+    { name: 'Smart metro', p: { demand: 75, signal: 'adaptive', navShare: 0.7, metering: true, vsl: true, cacc: 0.3, transit: 0.15, cruising: 0.1, fastClear: true, busLanes: true, bikeLanes: true, bikes: 0.08 } },
   ];
 
   const KPIS = [
     { id: 'speed', label: 'Network speed', unit: 'km/h', better: 1, get: (n) => n.stats.eff * 3.6, fmt: (v) => v.toFixed(0) },
     { id: 'hw', label: 'Highway speed', unit: 'km/h', better: 1, get: (n) => n.stats.hwV * 3.6, fmt: (v) => v.toFixed(0) },
     { id: 'city', label: 'Street speed', unit: 'km/h', better: 1, get: (n) => n.stats.cityV * 3.6, fmt: (v) => v.toFixed(0) },
+    { id: 'bus', label: 'Bus speed', unit: 'km/h', better: 1, get: (n) => n.stats.busV * 3.6, fmt: (v) => (v > 0 ? v.toFixed(0) : '–') },
     { id: 'tpm', label: 'Trips finished', unit: '/min', better: 1, get: (n) => n.stats.tpm, fmt: (v) => v.toFixed(0) },
-    { id: 'idle', label: 'Idling', unit: '%', better: -1, get: (n) => n.stats.idle * 100, fmt: (v) => v.toFixed(0) },
-    { id: 'wait', label: 'Waiting to enter', unit: 'cars', better: -1, get: (n) => n.stats.backlog, fmt: (v) => v.toFixed(0) },
+    { id: 'delay', label: 'Trip time vs free flow', unit: '×', better: -1, get: (n) => n.stats.delay, fmt: (v) => v.toFixed(2) },
+    { id: 'p95', label: 'Worst 1 in 20 trips', unit: '×', better: -1, get: (n) => n.stats.p95, fmt: (v) => v.toFixed(1) },
+    { id: 'wait', label: 'Waiting to depart', unit: 'trips', better: -1, get: (n) => n.stats.backlog, fmt: (v) => v.toFixed(0) },
   ];
 
   const EXPLAIN = [
-    ['Demand beats capacity', 'A lane moves roughly 1,800 to 2,200 vehicles an hour at best. Past a critical density each added car lowers total flow, so a road that carried traffic fine at 90% load can fall apart at 100%.'],
-    ['Phantom jams', 'No crash needed. One driver over-brakes, reaction lag makes the next brake harder, and the disturbance grows into a stop-and-go wave that drifts backwards at 15 to 20 km/h. Look for slanting bands in the highway chart.'],
-    ['Merging and exits', 'Ramp cars need gaps in the right lane, so on-ramps are bottlenecks below nominal capacity. Off-ramps are worse when the signal at the bottom cannot clear the queue: it backs up onto the highway and blocks every lane.'],
-    ['Breakdowns', 'One blocked lane of three removes far more than a third of capacity, because everyone must change lanes at one spot. Rubbernecking in the open lanes adds to it. A stopped vehicle in an avenue lane is a double-parked truck.'],
-    ['Signals, spillback and U-turns', 'Every red costs a stop and a restart. A green wave helps only the dominant direction, adaptive signals follow queues, and neither fixes demand above capacity. Left turns, U-turns and cruising for parking share the inner lane and slow everyone behind.'],
-    ['Roundabouts', 'Cars entering a roundabout must yield to traffic already circling, so there is no red light to wait at and conflicts are low-speed. They shine at moderate flows and with many left turns, and U-turns become a lap around the island. Under heavy one-sided flow the circulating stream can starve a side entry. Tap a junction to swap signals for a roundabout and compare.'],
-    ['Navigation', 'With rerouting on, drivers leave slow roads and use the highway or parallel streets. That evens out load, and in a saturated network can also spread a jam to roads that were fine.'],
-    ['Fixes that remove the sudden brake', 'Connected cars that see two vehicles ahead, speed limits that drop before a queue, and metering that keeps the main lane just under breakdown density work by smoothing flow, not by adding road.'],
-    ['What the model leaves out', 'Cars and trucks only (no buses, bikes or pedestrians), two-phase signals with no turn conflicts inside junctions, one trip purpose, no induced demand, weather or incidents beyond the ones you place. Treat results as direction and rough size, not forecasts.', true],
+    ['Demand beats capacity', 'A freeway lane moves roughly 1,900 to 2,200 vehicles an hour at best, a signalised lane about 1,800 per green hour. Past those flows queues grow faster than they clear, and demand that responds to delay keeps pushing back toward the limit.'],
+    ['Phantom jams', 'No crash needed. One driver over-brakes, reaction lag makes the next brake harder, and the disturbance grows into a stop-and-go wave that drifts backwards at 15 to 25 km/h. Look for slanting bands in the highway chart.'],
+    ['Merging and exits', 'Ramp cars follow a gap in the right lane and merge at speed; if none opens they wait and eventually force in. Off-ramps are worse when the signal at the bottom cannot clear the queue: it backs onto the highway and blocks every lane. Drivers start moving over for their exit a kilometre ahead.'],
+    ['Breakdowns and incidents', 'One blocked lane of three removes far more than a third of capacity, because everyone must change lanes at one spot. Rubbernecking adds to it, and how long it lasts matters as much as how bad it is, so faster clearance is a real lever.'],
+    ['Signals, left turns and pedestrians', 'Every red costs a stop and a restart. Left turns wait inside the junction for gaps in oncoming traffic and clear on the yellow, and turning cars yield to people on the crosswalk. A fixed plan tuned to expected flows beats an untuned one; adaptive signals follow actual queues; a green wave helps only the dominant direction.'],
+    ['Roundabouts', 'Entering cars yield to traffic already circling, there is no red to wait at, and conflicts are low speed. They do well at moderate flows and with many left turns; U-turns become a lap around the island. A busy single-lane ring is limited by its circulating flow, and a full ring is capped so it cannot lock up. Tap a junction to swap and compare, or make it two lanes.'],
+    ['Parking, buses and bikes', 'Drivers who cannot find curb parking circle the block, and every parking manoeuvre stops a lane for several seconds. Buses stop in the right lane unless it is reserved; bus lanes speed buses but take a lane from cars, so check person speed as well as vehicle speed. Bikes slow cars unless they have their own track.'],
+    ['Navigation and demand response', 'Live navigation moves traffic to side streets and the highway, but if everyone re-plans at once they all take the same detour. Staggered updates and averaging damp that. When roads get faster some trips switch back to driving, which is why added capacity often fills up again.'],
+    ['What the model leaves out', 'Parameters are matched to published stylised facts (freeway capacity near 2,100 veh/h/lane, signal saturation flow near 1,800, backward wave speed 20 km/h), not fitted to a real city or trajectory data. No weather, no trams or trucks beyond the types here, simplified two-phase signals without protected left phases, one trip purpose per period, and no long-run land-use change. Use it to compare options and understand mechanisms, not to forecast a specific road.', true],
   ];
 
   // --------------------------------------------------------------- state
-  const S = { net: null, rend: null, decor: null, playing: true, speed: 2, ema: {}, base: null, diagRun: 0, sel: null, lastChart: 0, ctl: {} };
+  const S = { net: null, rend: null, decor: null, playing: true, speed: 2, ema: {}, base: null, diagRun: 0, sel: null, lastChart: 0, ctl: {}, diagData: null, metric: 'speed' };
   const DT = 0.2;
 
   function makeNet(params, after) {
@@ -126,10 +145,10 @@
     const p = params(); p.roundabouts = list;
     setNet(makeNet(p));
   }
-  function toggleRoundabout(id) {
-    const cur = new Set(S.net.p.roundabouts || []);
-    if (cur.has(id)) cur.delete(id); else cur.add(id);
-    setRoundabouts([...cur]);
+  function toggleRoundabout(id, lanes) {
+    const cur = new Map((S.net.p.roundabouts || []).map((e) => { const [i, k] = String(e).split('#'); return [i, k === '2' ? 2 : 1]; }));
+    if (cur.get(id) === lanes) cur.delete(id); else cur.set(id, lanes);
+    setRoundabouts([...cur].map(([i, k]) => (k === 2 ? i + '#2' : i)));
   }
   function resetNet(preset) {
     if (preset) {
@@ -149,6 +168,7 @@
 
   function buildControl(c) {
     const w = document.createElement('div');
+    if (c.type === 'head') { w.className = 'chead'; w.textContent = c.label; return w; }
     w.className = 'ctl' + (c.type === 'toggle' ? ' toggle' : '');
     const id = 'ctl-' + c.key, tip = `<div class="tip">${c.tip || ''}</div>`;
     if (c.type === 'toggle') {
@@ -159,8 +179,9 @@
       w.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => setParam(c.key, b.dataset.v)));
     } else if (c.type === 'rbt') {
       w.innerHTML = `<div class="row"><span>${c.label}</span><span class="val" id="${id}-v"></span></div>
-        <div class="acts"><button class="btn sm" data-a="all">All local junctions</button><button class="btn sm" data-a="none">None</button><button class="btn sm" data-a="def">Default 5</button></div>${tip}`;
+        <div class="acts"><button class="btn sm" data-a="all">1 lane, all local</button><button class="btn sm" data-a="all2">2 lanes, all local</button><button class="btn sm" data-a="none">None</button><button class="btn sm" data-a="def">Default</button></div>${tip}`;
       w.querySelector('[data-a=all]').addEventListener('click', () => setRoundabouts(allLocalJunctions()));
+      w.querySelector('[data-a=all2]').addEventListener('click', () => setRoundabouts(allLocalJunctions().map((i) => i + '#2')));
       w.querySelector('[data-a=none]').addEventListener('click', () => setRoundabouts([]));
       w.querySelector('[data-a=def]').addEventListener('click', () => setRoundabouts(MM.DEFAULT_ROUNDABOUTS.slice()));
     } else if (c.type === 'disrupt') {
@@ -199,7 +220,11 @@
     }
   }
 
-  function setParam(key, val) { S.net.set(key, val); clearDiag(); refreshControls(); }
+  function setParam(key, val) {
+    S.net.set(key, val);
+    if (key === 'busLanes' || key === 'bikeLanes') S.rend.dirty = true;
+    clearDiag(); refreshControls();
+  }
 
   function buildPresets() {
     const host = $('#presets'); host.innerHTML = '';
@@ -234,12 +259,13 @@
       if (!el || v === undefined) continue;
       el.querySelector('.n').textContent = k.fmt(v);
       const d = el.querySelector('.d');
-      if (S.base && S.base[k.id] !== undefined) {
+      if (S.base && S.base[k.id] !== undefined && !(k.id === 'bus' && !(v > 0))) {
         const b = S.base[k.id], diff = v - b, rel = Math.abs(b) < 1e-6 ? 0 : diff / Math.abs(b) * 100;
         if (Math.abs(rel) < 1) { d.textContent = 'same as baseline'; d.className = 'd muted'; }
         else { d.textContent = `${diff > 0 ? '▲' : '▼'} ${Math.abs(rel).toFixed(0)}% vs baseline`; d.className = 'd ' + (diff * k.better > 0 ? 'up' : 'down'); }
       } else if (k.id === 'speed') { d.textContent = `${Math.round(v / (13.9 * 3.6) * 100)}% of free flow`; d.className = 'd muted'; }
       else if (k.id === 'hw') { d.textContent = `limit ${S.net.p.limit} km/h`; d.className = 'd muted'; }
+      else if (k.id === 'p95') { d.textContent = 'reliability'; d.className = 'd muted'; }
       else { d.textContent = ''; d.className = 'd'; }
     }
   }
@@ -254,20 +280,24 @@
     const hwRatio = st.hwV / (p.limit / 3.6);
     if (st.n > 80 && st.eff < 1.5) { level = 'gridlock'; text = 'Gridlock: queues have locked the network.'; }
     else if (hwRatio < 0.5) { level = 'jam'; text = 'Highway congested: speeds are well below the limit and queues are backing up the ramps.'; }
-    else if (st.cityV < 6.5) { level = 'jam'; text = 'Streets congested: queues at signals spill back through junctions.'; }
+    else if (st.cityV < 6.5) { level = 'jam'; text = 'Streets congested: queues at junctions spill back through the grid.'; }
     else if (hwRatio < 0.75 || st.cityV < 9) { level = 'dense'; text = 'Busy: stop-start driving on some roads.'; }
     else { level = 'free'; text = 'Flowing: most cars are moving near the limit.'; }
     const spill = n.links.find((L) => L.kind === 'ramp' && L.to.type !== 'merge' && L.n >= 10 && L.ratio < 0.35);
     if (spill) text += ' An off-ramp queue is backing onto the highway.';
-    const dis = n.countDisruptions();
+    let inc = 0; for (const L of n.links) if (L.obs && !L.obs.perm) inc++;
+    const dis = n.countDisruptions() - inc;
+    if (inc) text += ` ${inc} incident${inc > 1 ? 's' : ''} blocking a lane.`;
     if (dis) text += ` ${dis} disruption${dis > 1 ? 's' : ''} on the map.`;
-    if (st.backlog > 20) text += ` ${st.backlog} cars cannot enter.`;
+    if (st.backlog > 20) text += ` ${st.backlog} trips cannot depart.`;
     $('#banner').dataset.level = level;
     $('#banner-text').textContent = text;
+    const m = n._mult() * n.indMult;
+    $('#clock').textContent = `${fmtClock(n.clock)} · demand ${Math.round(m * 100)}%`;
   }
 
   // ----------------------------------------------------------- selection
-  const TYPE_NAME = { h: 'Car', t: 'Truck', c: 'Connected car' };
+  const TYPE_NAME = { h: 'Car', t: 'Truck', c: 'Connected car', b: 'Bus', k: 'Bicycle' };
   function showSel() {
     const el = $('#sel'), s = S.sel;
     if (!s) { el.hidden = true; S.rend.sel = null; return; }
@@ -276,21 +306,26 @@
     if (s.car) {
       const c = s.car;
       el.innerHTML = `<div class="st"><b>${TYPE_NAME[c.type] || 'Car'}</b><button class="x" aria-label="Close">×</button></div>
-        <div class="muted" id="sel-info"></div><div class="acts"><button class="btn sm" data-a="brake">Hard brake for 3 s</button></div>`;
-      el.querySelector('[data-a=brake]').addEventListener('click', () => { c.brakeUntil = S.net.t + 3; c.brakeA = -4.5; });
+        <div class="muted" id="sel-info"></div><div class="acts">${c.type === 'k' ? '' : '<button class="btn sm" data-a="brake">Hard brake for 3 s</button>'}</div>`;
+      const b = el.querySelector('[data-a=brake]');
+      if (b) b.addEventListener('click', () => { c.brakeUntil = S.net.t + 3; c.brakeA = -4.5; });
     } else if (s.node) {
       const n = s.node, isR = n.type === 'round';
       const ok = isR || n.in.every((l) => l.kind === 'art' || l.kind === 'loc');
-      el.innerHTML = `<div class="st"><b>${isR ? 'Roundabout' : 'Signalised junction'}</b><button class="x" aria-label="Close">×</button></div>
-        <div class="muted">${nodeLabel(n)}. ${isR ? 'Cars yield to traffic already circling.' : 'Two-phase traffic signal.'}</div>
-        <div class="acts">${ok ? `<button class="btn sm" data-a="rbt">${isR ? 'Restore signals' : 'Replace with a roundabout'}</button>` : ''}</div>
+      const wide = n.in.some((l) => l.lanes >= 2) || isR;
+      el.innerHTML = `<div class="st"><b>${isR ? (n.rl === 2 ? 'Two-lane roundabout' : 'Roundabout') : 'Signalised junction'}</b><button class="x" aria-label="Close">×</button></div>
+        <div class="muted">${nodeLabel(n)}. ${isR ? 'Cars yield to traffic already circling.' : 'Two-phase traffic signal, permissive left turns, crosswalks.'}</div>
+        <div class="acts">${ok ? (isR ? '<button class="btn sm" data-a="sig">Restore signals</button>' + (n.rl === 2 ? '<button class="btn sm" data-a="r1">Make it 1 lane</button>' : '<button class="btn sm" data-a="r2">Make it 2 lanes</button>')
+          : '<button class="btn sm" data-a="r1">Roundabout (1 lane)</button>' + (wide ? '<button class="btn sm" data-a="r2">Roundabout (2 lanes)</button>' : '')) : ''}</div>
         ${ok ? '<div class="muted">Rebuilds the road and restarts traffic. Pin a baseline first to compare.</div>' : ''}`;
-      const b = el.querySelector('[data-a=rbt]');
-      if (b) b.addEventListener('click', () => toggleRoundabout(n.id));
+      const on = (a, fn) => { const b = el.querySelector(`[data-a=${a}]`); if (b) b.addEventListener('click', fn); };
+      on('sig', () => { const cur = (S.net.p.roundabouts || []).filter((e) => String(e).split('#')[0] !== n.id); setRoundabouts(cur); });
+      on('r1', () => { const cur = (S.net.p.roundabouts || []).filter((e) => String(e).split('#')[0] !== n.id); cur.push(n.id); setRoundabouts(cur); });
+      on('r2', () => { const cur = (S.net.p.roundabouts || []).filter((e) => String(e).split('#')[0] !== n.id); cur.push(n.id + '#2'); setRoundabouts(cur); });
     } else {
       const L = s.link;
       const has = !!(L.obs || L.block !== null);
-      const canAdd = L.kind !== 'ramp' && !(L.from.type === 'gate' && L.to.type === 'gate');
+      const canAdd = L.kind !== 'ramp' && L.kind !== 'ring' && !(L.from.type === 'gate' && L.to.type === 'gate');
       const what = L.lanes >= 2 ? (L.kind === 'hw' ? 'breakdown' : 'double-parked vehicle') : 'slow zone';
       el.innerHTML = `<div class="st"><b>${linkLabel(L)}</b><button class="x" aria-label="Close">×</button></div>
         <div class="muted" id="sel-info"></div>
@@ -306,12 +341,17 @@
     const el = $('#sel-info'); if (!el) return;
     if (s.car) {
       const c = s.car;
-      const alive = c.link.lanesArr[c.lane] && c.link.lanesArr[c.lane].includes(c);
+      const alive = !c.dead && (c.sep ? c.link.bikes.includes(c) : c.link.lanesArr[c.lane] && c.link.lanesArr[c.lane].includes(c));
       if (!alive) { el.textContent = 'Left the map.'; return; }
-      const dest = gateLabel(c.dest);
-      const mode = c.wander > 0 ? 'Cruising for parking, then to ' + dest : 'Heading to ' + dest;
+      const d = c.dest;
+      const dest = d.node ? gateLabel(d.node) : `a parking spot on ${linkLabel(d.link)}`;
+      let mode = `Heading to ${dest}`;
+      if (c.stopKind === 'park') mode = `Pulling in to park on ${linkLabel(d.link)}`;
+      else if (c.stopKind === 'bus') mode = 'Stopping to pick up passengers';
+      else if (c.wander > 0) mode = `Circling for parking, then ${dest}`;
+      else if (c.tries > 0) mode = `Returning to ${dest} after missing a space`;
       const nm = c.next ? ({ left: 'turning left', right: 'turning right', straight: 'going straight', u: 'making a U-turn', exit: 'taking the exit', merge: 'merging' })[c.next.kind] : '';
-      el.textContent = `${Math.round(c.v * 3.6)} km/h on ${linkLabel(c.link)}. ${mode}${nm ? ', next ' + nm : ''}.`;
+      el.textContent = `${Math.round(c.v * 3.6)} km/h on ${linkLabel(c.link)}. ${mode}${nm ? ', next ' + nm : ''}${c.nav ? '. Uses live navigation' : ''}.`;
     } else {
       const L = s.link;
       el.textContent = `${L.lanes} lane${L.lanes > 1 ? 's' : ''}, limit ${Math.round(L.vlim * 3.6)} km/h, now ${Math.round(L.vAvg * 3.6)} km/h with ${L.n} vehicle${L.n === 1 ? '' : 's'}.`;
@@ -353,6 +393,7 @@
     $('#zin').addEventListener('click', () => S.rend.zoomAt(S.rend.size[0] / 2, S.rend.size[1] / 2, 1.5));
     $('#zout').addEventListener('click', () => S.rend.zoomAt(S.rend.size[0] / 2, S.rend.size[1] / 2, 1 / 1.5));
     $('#traffic').addEventListener('change', (e) => { S.rend.traffic = e.target.checked; });
+    $('#land').addEventListener('change', (e) => { S.rend.landUse = e.target.checked; S.rend.dirty = true; });
     const VIEWS = { interchange: [1400, 270, 1.15], merge: [1000, 285, 1.9], downtown: [1400, 760, 1.2], bridge: [1900, 760, 1.1] };
     document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => {
       const v = b.dataset.view;
@@ -436,39 +477,43 @@
   }
 
   // ------------------------------------------------------------ diagnosis
-  function clearDiag() { S.diagRun++; $('#diag-out').innerHTML = ''; $('#diag').disabled = false; }
+  function clearDiag() { S.diagRun++; S.diagData = null; $('#diag-out').innerHTML = ''; $('#diag-opts').hidden = true; $('#diag').disabled = false; }
 
   function variants(p) {
     const v = [];
     const add = (name, tag, ch) => v.push({ name, tag, set: ch, p: Object.assign({}, p, ch) });
-    if (p.noise > 0) add('No random braking', 'cause', { noise: 0 });
-    if (p.cruising > 0) add('No cruising for parking', 'cause', { cruising: 0 });
-    if (p.trucks > 0.02) add('Trucks off peak (2%)', 'cause', { trucks: 0.02 });
-    if ((p.obstacles && p.obstacles.length) || (p.blocks && p.blocks.length)) add('Clear all disruptions', 'cause', { obstacles: [], blocks: [] });
+    const rb = p.roundabouts || [];
     const all = allLocalJunctions();
-    if (all.some((j) => !(p.roundabouts || []).includes(j))) add('Roundabouts at local junctions', 'fix', { roundabouts: all });
-    if ((p.roundabouts || []).length) add('Signals instead of roundabouts', 'fix', { roundabouts: [] });
+    if (p.noise > 0) add('No random braking', 'cause', { noise: 0 });
+    if (p.cruising > 0) add('Always find curb parking', 'cause', { cruising: 0 });
+    if (p.trucks > 0.02) add('Trucks cut to 2%', 'cause', { trucks: 0.02 });
+    if (p.incidents > 0) add('No random incidents', 'cause', { incidents: 0 });
+    if ((p.obstacles && p.obstacles.length) || (p.blocks && p.blocks.length)) add('Clear your disruptions', 'cause', { obstacles: [], blocks: [] });
+    if (p.signal !== 'webster') add('Signals tuned to flows', 'fix', { signal: 'webster' });
     if (p.signal !== 'adaptive') add('Adaptive signals', 'fix', { signal: 'adaptive' });
     if (p.signal !== 'sync') add('Green-wave coordination', 'fix', { signal: 'sync' });
-    if (p.cycle > 55) add('Shorter signal cycle (50 s)', 'fix', { cycle: 50 });
-    if (!p.reroute) add('Live navigation rerouting', 'fix', { reroute: true });
+    if (p.signal === 'untuned' && p.cycle > 55) add('Shorter untuned cycle (50 s)', 'fix', { cycle: 50 });
+    if (all.some((j) => !rb.includes(j) && !rb.includes(j + '#2'))) add('Roundabouts at local junctions', 'fix', { roundabouts: all });
+    add('Two-lane roundabouts at local junctions', 'fix', { roundabouts: all.map((j) => j + '#2') });
+    if (rb.length) add('Signals instead of roundabouts', 'fix', { roundabouts: [] });
+    if (p.navShare < 0.8) add('80% on live navigation', 'fix', { navShare: 0.8 });
+    if (p.navShare > 0) add('No live navigation', 'fix', { navShare: 0 });
     if (!p.metering) add('Ramp metering', 'fix', { metering: true });
     if (!p.vsl) add('Variable speed limits', 'fix', { vsl: true });
     if (p.cacc < 0.3) add('30% connected cars', 'fix', { cacc: 0.3 });
-    add('20% shift to transit/bike', 'fix', { transit: Math.min(0.6, p.transit + 0.2) });
-    add('15% staggered / remote', 'fix', { flex: Math.min(0.5, p.flex + 0.15) });
     if (p.limit > 90) add('90 km/h highway limit', 'fix', { limit: 90 });
+    if (!p.fastClear && p.incidents > 0) add('Faster incident clearance', 'fix', { fastClear: true });
+    if (!p.busLanes) add('Bus lanes on avenues', 'fix', { busLanes: true });
+    if (p.busFreq < 12) add('Twice the bus service', 'fix', { busFreq: Math.max(8, p.busFreq * 2) });
+    if (!p.bikeLanes) add('Protected bike lanes', 'fix', { bikeLanes: true, bikes: Math.max(p.bikes, 0.08) });
+    add('20% shift to transit/carpool', 'fix', { transit: Math.min(0.6, p.transit + 0.2) });
+    add('15% staggered / remote', 'fix', { flex: Math.min(0.5, p.flex + 0.15) });
     return v;
   }
 
   function makePool(n) {
     const workers = [];
-    try {
-      for (let i = 0; i < n; i++) {
-        const w = new Worker('js/worker.js');
-        workers.push(w);
-      }
-    } catch (e) { return null; }
+    try { for (let i = 0; i < n; i++) workers.push(new Worker('js/worker.js')); } catch (e) { return null; }
     return workers;
   }
 
@@ -505,42 +550,56 @@
     return results;
   }
 
+  const T975 = { 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262 };
+
   async function runDiagnosis() {
     const token = ++S.diagRun;
     const btn = $('#diag'); btn.disabled = true;
     const out = $('#diag-out');
     const p0 = params();
-    const vs = variants(p0), seeds = [11, 12, 13];
+    const vs = variants(p0), nSeeds = +$('#diag-seeds').value, seeds = [11, 12, 13, 14, 15, 16, 17, 18, 19].slice(0, nSeeds);
     const all = [{ name: 'base', p: p0 }, ...vs];
     const jobs = [];
-    for (const v of all) for (const sd of seeds) jobs.push({ params: v.p, seconds: 600, warm: 300, seed: sd });
-    out.innerHTML = '<div class="progress"><i></i></div><div class="muted">Simulating ' + jobs.length + ' runs of 10 minutes each.</div>';
+    for (const v of all) for (const sd of seeds) jobs.push({ params: v.p, seconds: 540, warm: 270, seed: sd });
+    out.innerHTML = `<div class="progress"><i></i></div><div class="muted">${jobs.length} runs of 9 minutes, same ${nSeeds} demand patterns for every option.</div>`;
     const bar = out.querySelector('.progress i');
     const res = await runJobs(jobs, (f) => { bar.style.width = (f * 100).toFixed(0) + '%'; }, token);
     if (!res || token !== S.diagRun) return;
-    const avg = (k) => {
-      const rs = res.slice(k * seeds.length, (k + 1) * seeds.length), m = (f) => rs.reduce((s, r) => s + r[f], 0) / rs.length;
-      return { speed: m('speed'), hw: m('hwV'), city: m('cityV'), tpm: m('tpm'), back: m('backlog') };
-    };
-    const base = avg(0);
-    const rows = vs.map((v, i) => { const r = avg(i + 1); return { v, gain: r.speed - base.speed, rel: (r.speed - base.speed) / Math.max(base.speed, 1) * 100, r }; });
-    rows.sort((a, b) => b.gain - a.gain);
-    renderDiag(base, rows);
+    const per = (k) => res.slice(k * seeds.length, (k + 1) * seeds.length);
+    S.diagData = { base: per(0), rows: vs.map((v, i) => ({ v, runs: per(i + 1) })), n: seeds.length };
+    $('#diag-opts').hidden = false;
+    renderDiag();
     btn.disabled = false;
   }
 
-  function renderDiag(base, rows) {
-    const out = $('#diag-out');
+  function stat(arr) {
+    const n = arr.length, m = arr.reduce((a, b) => a + b, 0) / n;
+    const sd = Math.sqrt(arr.reduce((a, b) => a + (b - m) * (b - m), 0) / Math.max(1, n - 1));
+    return { m, ci: (T975[n - 1] || 2.3) * sd / Math.sqrt(n) };
+  }
+
+  function renderDiag() {
+    const D = S.diagData; if (!D) return;
+    const key = S.metric === 'person' ? 'pSpeed' : 'speed', out = $('#diag-out');
+    const mean = (runs, f) => runs.reduce((a, r) => a + r[f], 0) / runs.length;
+    const rows = D.rows.map((r) => {
+      const d = r.runs.map((x, i) => x[key] - D.base[i][key]);
+      const s = stat(d);
+      return { v: r.v, gain: s.m, ci: s.ci, clear: Math.abs(s.m) > s.ci, rel: s.m / Math.max(mean(D.base, key), 1) * 100,
+        dh: mean(r.runs, 'delayH') - mean(D.base, 'delayH'), p95: mean(r.runs, 'p95') - mean(D.base, 'p95'),
+        hw: mean(r.runs, 'hwV') - mean(D.base, 'hwV'), city: mean(r.runs, 'cityV') - mean(D.base, 'cityV'), bus: mean(r.runs, 'busV') - mean(D.base, 'busV') };
+    }).sort((a, b) => b.gain - a.gain);
     const maxAbs = Math.max(1, ...rows.map((x) => Math.abs(x.gain)));
-    out.innerHTML = `<div class="muted">Baseline: ${base.speed.toFixed(0)} km/h network average (highway ${base.hw.toFixed(0)}, streets ${base.city.toFixed(0)}), ${base.tpm.toFixed(0)} trips/min.</div>`;
+    const label = key === 'pSpeed' ? 'person-weighted speed' : 'vehicle speed';
+    out.innerHTML = `<div class="muted">Baseline ${mean(D.base, key).toFixed(1)} km/h ${label}; highway ${mean(D.base, 'hwV').toFixed(0)}, streets ${mean(D.base, 'cityV').toFixed(0)}, ${mean(D.base, 'delayH').toFixed(0)} person-hours lost per hour, worst 1 in 20 trips ${mean(D.base, 'p95').toFixed(1)}× free flow. Bars show the mean gain over ${D.n} paired runs, ± is a 95% interval.</div>`;
     for (const x of rows) {
-      const noise = Math.abs(x.gain) < 1.2, neg = x.gain < 0 && !noise, row = document.createElement('div');
+      const neg = x.gain < 0 && x.clear, row = document.createElement('div');
       row.className = 'drow';
-      const d = (a, b) => `${a - b >= 0 ? '+' : ''}${(a - b).toFixed(0)}`;
+      const sg = (v, d) => `${v >= 0 ? '+' : ''}${v.toFixed(d)}`;
       row.innerHTML = `<div class="name"><b>${x.v.name}</b><span class="tag">${x.v.tag === 'cause' ? 'removes a cause' : 'fix'}</span></div>
-        <div class="gain ${neg ? 'neg' : ''}${noise ? ' flat' : ''}">${x.gain < 0 ? '' : '+'}${x.gain.toFixed(1)} km/h <span class="muted">(${x.gain < 0 ? '' : '+'}${x.rel.toFixed(0)}%)</span></div>
-        <div class="bar"><i class="${neg ? 'neg' : ''}${noise ? ' flat' : ''}" style="width:${Math.abs(x.gain) / maxAbs * 100}%"></i></div>
-        <div class="muted" style="grid-column:1/-1">highway ${d(x.r.hw, base.hw)} km/h · streets ${d(x.r.city, base.city)} km/h · trips ${d(x.r.tpm, base.tpm)}/min${noise ? ' · within run-to-run noise' : neg ? ' · makes it worse' : ''}
+        <div class="gain ${neg ? 'neg' : ''}${x.clear ? '' : ' flat'}">${sg(x.gain, 1)} km/h <span class="muted">±${x.ci.toFixed(1)}</span></div>
+        <div class="bar"><i class="${neg ? 'neg' : ''}${x.clear ? '' : ' flat'}" style="width:${Math.abs(x.gain) / maxAbs * 100}%"></i></div>
+        <div class="muted" style="grid-column:1/-1">${x.clear ? (x.gain > 0 ? 'clear gain' : 'clearly worse') : 'no clear effect'} · highway ${sg(x.hw, 0)}, streets ${sg(x.city, 0)}${x.bus ? `, buses ${sg(x.bus, 0)}` : ''} km/h · ${sg(x.dh, 0)} person-h/h lost · reliability ${sg(x.p95, 2)}×
           <button class="btn sm" style="margin-left:6px">Apply</button></div>`;
       row.querySelector('button').addEventListener('click', () => applyVariant(x.v));
       out.appendChild(row);
@@ -553,6 +612,7 @@
       if (k === 'obstacles' || k === 'blocks') S.net.clearDisruptions();
       else S.net.set(k, val);
     }
+    if ('busLanes' in v.set || 'bikeLanes' in v.set) S.rend.dirty = true;
     refreshControls();
     $('#diag-out').insertAdjacentHTML('afterbegin', `<div class="muted">Applied: ${v.name}. Re-run to rank again.</div>`);
   }
@@ -570,6 +630,7 @@
   $('#play').addEventListener('click', () => { S.playing = !S.playing; $('#play').textContent = S.playing ? 'Pause' : 'Play'; });
   $('#reset').addEventListener('click', () => resetNet(null));
   $('#diag').addEventListener('click', runDiagnosis);
+  document.querySelectorAll('[name=dmetric]').forEach((r) => r.addEventListener('change', (e) => { S.metric = e.target.value; renderDiag(); }));
   $('#pin').addEventListener('click', () => { S.base = Object.assign({}, S.ema); renderBaseline(); });
   $('#unpin').addEventListener('click', () => { S.base = null; renderBaseline(); });
 
@@ -581,8 +642,8 @@
     if (S.playing && !document.hidden) {
       acc += real * S.speed;
       let n = 0;
-      while (acc >= DT && n < 80) { net.step(DT); acc -= DT; n++; }
-      if (n === 80) acc = 0;
+      while (acc >= DT && n < 60) { net.step(DT); acc -= DT; n++; }
+      if (n === 60) acc = 0;
       if (n) updateKpis(n * DT);
     }
     S.rend.draw(now);
@@ -597,9 +658,9 @@
     S.decor = MM.buildDecor(map0);
     S.net = makeNet({});
     S.rend = new Renderer($('#stage'), S.net, S.decor);
-    readTheme();
-    S.rend.setTheme(readTheme());
-    matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => S.rend.setTheme(readTheme()));
+    const theme = () => { readTheme(); S.rend.setTheme(readTheme()); };
+    theme();
+    matchMedia('(prefers-color-scheme: light)').addEventListener('change', theme);
     setupMap(); buildControls(); buildPresets(); buildKpis(); buildExplain(); renderBaseline();
     document.querySelector('[data-speed="2"]').classList.add('on');
     requestAnimationFrame(frame);

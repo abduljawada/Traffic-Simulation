@@ -15,6 +15,7 @@
     <p>One metro, highway to side street. Break the traffic, then fix it.</p>
   </div>
   <div class="transport">
+    <span id="clock" class="clock" aria-label="Simulated clock"></span>
     <button id="play" class="btn" aria-label="Pause">Pause</button>
     <div class="speed" role="group" aria-label="Simulation speed">
       <button class="btn sm" data-speed="1">1×</button>
@@ -44,7 +45,10 @@
         <button class="btn sm" id="zin" aria-label="Zoom in">+</button>
         <button class="btn sm" id="zout" aria-label="Zoom out">−</button>
       </div>
-      <label class="tcheck"><input type="checkbox" id="traffic" checked> Traffic colours</label>
+      <div class="tchecks">
+        <label class="tcheck"><input type="checkbox" id="land"> Land use</label>
+        <label class="tcheck"><input type="checkbox" id="traffic" checked> Traffic colours</label>
+      </div>
       <div class="legend" aria-hidden="true">
         <span>stopped</span><i class="ramp"></i><span>free flow</span>
       </div>
@@ -78,8 +82,16 @@
     </section>
     <section class="panel">
       <h2>Diagnose</h2>
-      <p class="muted">Re-runs the current setup with each cause removed or fix added, over several random seeds, and ranks the speed gain.</p>
-      <button id="diag" class="btn primary">Run diagnosis</button>
+      <p class="muted">Re-runs the current setup with each cause removed or fix added. Every option sees the same demand patterns, so differences are paired and come with a 95% interval.</p>
+      <div class="dctl">
+        <label>Runs per option <select id="diag-seeds"><option value="3" selected>3 (about 30 s)</option><option value="5">5</option><option value="8">8 (thorough)</option></select></label>
+        <button id="diag" class="btn primary">Run diagnosis</button>
+      </div>
+      <fieldset id="diag-opts" class="dopts" hidden>
+        <legend>Rank by</legend>
+        <label><input type="radio" name="dmetric" value="speed" checked> Vehicle speed</label>
+        <label><input type="radio" name="dmetric" value="person"> Person speed (buses count 28)</label>
+      </fieldset>
       <div id="diag-out" class="diag"></div>
     </section>
   </aside>

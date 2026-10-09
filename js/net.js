@@ -94,7 +94,7 @@
       this._weights();
       this.rs = new Map();
       this.dyn = [0, 1, 2, 3].map((k) => ({ tt: this.links.map((L) => L.ttEst), cache: new Map(), next: 5 * k }));
-      this.stats = { n: 0, hwV: 30, cityV: 12, eff: 12, idle: 0, tpm: 0, delay: 1, backlog: 0, hwFlow: 0, hwN: 0, busV: 0, bikeV: 0, pSpeed: 12, buses: 0, bikes: 0 };
+      this.stats = { n: 0, hwV: 30, cityV: 12, eff: 12, idle: 0, tpm: 0, delay: 1, backlog: 0, hwFlow: 0, hwN: 0, busV: 0, bikeV: 0, pSpeed: 12, buses: 0, bikes: 0, p95: 1.5 };
       this.det = [this.links.find((l) => l.kind === 'hw' && l.from.id === 'gW'), this.links.find((l) => l.kind === 'hw' && l.from.id === 'gE')];
       this._tune(); this.offsets();
       this._busLanes();
@@ -1054,6 +1054,7 @@
       this.wave.push(row); if (this.wave.length > 240) this.wave.shift();
       this.hist.push({ t: this.t, hwV: st.hwV, cityV: st.cityV, n: st.n, backlog: st.backlog, idle: st.idle, tpm: st.tpm, busV: st.busV, mult: this._mult() * this.indMult });
       if (this.hist.length > 300) this.hist.shift();
+      if (this.done.length > 8) { const r = this.done.map((x) => x[1]).sort((a, b) => a - b); st.p95 = r[Math.min(r.length - 1, Math.floor(0.95 * r.length))]; }
       if (this.tuneDirty && this.t - this.tuneAt > 3) { this._tune(); this.offsets(); }
     }
 

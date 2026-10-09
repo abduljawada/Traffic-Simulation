@@ -95,7 +95,8 @@ h1, h2, h3, p { margin: 0; }
 .views .btn, .zoom .btn { background: color-mix(in srgb, var(--panel) 88%, transparent); backdrop-filter: blur(4px); }
 .zoom { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; gap: 4px; }
 .zoom .btn { width: 32px; height: 32px; font-size: 18px; line-height: 1; padding: 0; }
-.tcheck { position: absolute; right: 10px; bottom: 10px; font-size: 12px; background: color-mix(in srgb, var(--panel) 88%, transparent); padding: 4px 8px; border-radius: 6px; display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.tchecks { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.tcheck { font-size: 12px; background: color-mix(in srgb, var(--panel) 88%, transparent); padding: 4px 8px; border-radius: 6px; display: flex; gap: 6px; align-items: center; cursor: pointer; }
 .sel { position: absolute; left: 10px; right: 10px; bottom: 44px; max-width: 380px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; font-size: 13px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 6px 24px rgba(0,0,0,.3); }
 .sel[hidden] { display: none; }
 .sel .st { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
@@ -106,7 +107,7 @@ h1, h2, h3, p { margin: 0; }
   background: color-mix(in srgb, var(--panel) 85%, transparent); padding: 3px 8px; border-radius: 6px;
 }
 
-.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 12px 0 8px; }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 12px 0 8px; }
 .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
 .kpi .l { color: var(--muted); font-size: 12px; }
 .kpi .v { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -169,9 +170,19 @@ h1, h2, h3, p { margin: 0; }
   .top { padding-inline: 16px; }
   .views { flex-wrap: nowrap; overflow-x: auto; right: 52px; max-width: none; scrollbar-width: none; }
   .views .btn { flex: none; }
-  .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .kpi { padding: 8px 10px; }
   .kpi .v { font-size: 20px; }
   .kpi .d { font-size: 11px; min-height: 0; }
   .sel { bottom: 40px; }
 }
+
+.clock { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--muted); padding: 0 4px; }
+.chead { font-size: 11px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
+.chead:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.dctl { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+.dctl select { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font: inherit; }
+.dopts { border: 1px solid var(--line); border-radius: 8px; margin: 10px 0 0; padding: 4px 10px 8px; font-size: 12.5px; display: flex; flex-direction: column; gap: 2px; }
+.dopts legend { color: var(--muted); font-size: 11px; padding: 0 4px; }
+.dopts[hidden] { display: none; }
+@media (min-width: 1001px) { .side { position: sticky; top: 12px; align-self: start; max-height: calc(100vh - 24px); overflow-y: auto; } }
