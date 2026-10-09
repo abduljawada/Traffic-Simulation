@@ -17,6 +17,7 @@
   };
   const LAG = { hw: 1.4, ramp: 1.0, art: 0.8, loc: 0.6, ring: 0.6 }, CLAG = 0.15;
   const YELLOW = 3, ALLRED = 1.2, MIN_GREEN = 7, MAX_GREEN = 45;
+  const LW = 3.5, LAT_RATE = 1.6; // lane width, lateral speed during a lane change (m/s)
   const BIN = 100; // metres per speed bin (VSL)
   const WBIN = 50; // space-time bin
 
@@ -304,7 +305,7 @@
           id: this.nextId++, link: L, lane, s: 0, v: Math.min(L.vlim * 0.6, rear && !rear.isObs ? rear.v + 2 : 12), a: 0, at: 0, len: P.len, type, v0f,
           next: null, mv: null, dest, t0: this.t, ff: this.routes0.get(dest.id)[L.id],
           wander: !x.hw && this.rand() < this.p.cruising ? 3 + ((this.rand() * 8) | 0) : 0,
-          brakeUntil: 0, brakeA: 0, lcCool: 0, waitT: 0, gap: null, virt: false, isObs: false,
+          brakeUntil: 0, brakeA: 0, lcCool: 0, lat: 0, waitT: 0, gap: null, virt: false, isObs: false,
         };
         this._pick(c, L);
         arr.push(c);
@@ -373,7 +374,8 @@
           }
           if (best >= 0) {
             arr.splice(k, 1);
-            c.lane = best; c.lcCool = t + (okNow ? 2.5 : 1.2);
+            c.lat += (best - c.lane) * LW;
+            c.lane = best; c.lcCool = t + (okNow ? 3.5 : 2.2);
             this._insert(L.lanesArr[best], c);
           }
         }
@@ -474,6 +476,7 @@
             c.v = Math.max(0, c.v + c.a * dt);
             if (c.gap !== null && c.v * dt > c.gap - 0.3) c.v = Math.max(0, (c.gap - 0.3) / dt);
             c.s += c.v * dt;
+            if (c.lat !== 0) { const st = LAT_RATE * dt; c.lat = Math.abs(c.lat) <= st ? 0 : c.lat - Math.sign(c.lat) * st; }
             if (c.mv && c.s >= 0) c.mv = null;
           }
           const f = arr[0];
@@ -498,7 +501,7 @@
       this.moveCount[m.kind] = (this.moveCount[m.kind] || 0) + 1;
       if (L.kind === 'ramp' && L.to.type === 'merge') L.to.meterNext = this.t + 3.5;
       if (L === this.det[0] || L === this.det[1]) this.hwCross.push(this.t);
-      c.lane0 = c.lane; c.link = B; c.lane = tl; c.s = s2; c.mv = m;
+      c.lane0 = c.lane; c.lat = 0; c.link = B; c.lane = tl; c.s = s2; c.mv = m;
       this._insert(bl, c);
       this._pick(c, B);
     }

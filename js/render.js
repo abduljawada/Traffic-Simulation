@@ -347,8 +347,10 @@
         const ang = t < 0.98 ? Math.atan2(b2[1] - b[1], b2[0] - b[0]) : Math.atan2(k[3][1] - k[2][1], k[3][0] - k[2][0]);
         return [b[0], b[1], ang];
       }
-      const p = MM.atS(L.pts, L.cum, c.s);
-      return [p[0] - p[3] * off, p[1] + p[2] * off, Math.atan2(p[3], p[2])];
+      const p = MM.atS(L.pts, L.cum, c.s), o = off + (c.lat || 0);
+      let ang = Math.atan2(p[3], p[2]);
+      if (c.lat) ang += Math.atan2(-Math.sign(c.lat) * 1.6, Math.max(c.v, 2));
+      return [p[0] - p[3] * o, p[1] + p[2] * o, ang];
     }
 
     draw(now) {
