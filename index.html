@@ -2,21 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Traffic Lab: why traffic jams happen</title>
-<meta name="description" content="Interactive highway and city traffic simulation. Find the causes of congestion and test what reduces it.">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Traffic Lab</title>
+<meta name="description" content="One-city traffic simulation with a highway, interchanges, bridges, signalised streets and U-turns. Find what causes congestion and what reduces it.">
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <header class="top">
   <div class="brand">
     <h1>Traffic Lab</h1>
-    <p>Break the traffic, then fix it.</p>
+    <p>One metro, highway to side street. Break the traffic, then fix it.</p>
   </div>
-  <nav class="tabs" role="tablist" aria-label="Scenario">
-    <button role="tab" id="tab-highway" aria-selected="true" data-mode="highway">Highway</button>
-    <button role="tab" id="tab-city" aria-selected="false" data-mode="city">City grid</button>
-  </nav>
   <div class="transport">
     <button id="play" class="btn" aria-label="Pause">Pause</button>
     <div class="speed" role="group" aria-label="Simulation speed">
@@ -34,12 +31,24 @@
     <div id="banner" class="banner" data-level="free" aria-live="polite">
       <span class="dot"></span><span id="banner-text"></span>
     </div>
-    <div class="stage">
-      <canvas id="stage" aria-label="Traffic simulation view"></canvas>
+    <div class="stage" id="stage-wrap">
+      <canvas id="stage" aria-label="Interactive traffic map. Drag to pan, scroll or pinch to zoom, tap a road or car for details."></canvas>
+      <div class="views" role="group" aria-label="Map views">
+        <button class="btn sm" data-view="fit">Whole map</button>
+        <button class="btn sm" data-view="interchange">Interchange</button>
+        <button class="btn sm" data-view="merge">Ramp merge</button>
+        <button class="btn sm" data-view="downtown">Downtown</button>
+        <button class="btn sm" data-view="bridge">River bridges</button>
+      </div>
+      <div class="zoom" role="group" aria-label="Zoom">
+        <button class="btn sm" id="zin" aria-label="Zoom in">+</button>
+        <button class="btn sm" id="zout" aria-label="Zoom out">−</button>
+      </div>
+      <label class="tcheck"><input type="checkbox" id="traffic" checked> Traffic colours</label>
       <div class="legend" aria-hidden="true">
         <span>stopped</span><i class="ramp"></i><span>free flow</span>
       </div>
-      <div id="hint" class="hint"></div>
+      <div id="sel" class="sel" hidden></div>
     </div>
     <div id="kpis" class="kpis"></div>
     <div class="baseline">
@@ -48,9 +57,9 @@
       <span id="pin-note" class="muted"></span>
     </div>
     <div class="charts">
-      <figure><canvas id="c1"></canvas><figcaption id="c1t"></figcaption></figure>
-      <figure><canvas id="c2"></canvas><figcaption id="c2t"></figcaption></figure>
-      <figure><canvas id="c3"></canvas><figcaption id="c3t"></figcaption></figure>
+      <figure><canvas id="c1"></canvas><figcaption>Average speed: highway vs streets (km/h)</figcaption></figure>
+      <figure><canvas id="c2"></canvas><figcaption>Highway eastbound over time. Bands slanting down are jams moving backwards</figcaption></figure>
+      <figure><canvas id="c3"></canvas><figcaption>Cars on the network and waiting to enter</figcaption></figure>
     </div>
   </section>
 
@@ -78,11 +87,12 @@
 
 <section class="explain" id="explain"></section>
 <footer class="foot">
-  Models: Intelligent Driver Model + MOBIL lane changing (highway), IDM with two-phase signals (city). Simplified on purpose; see "What the model leaves out".
+  Car following: Intelligent Driver Model with reaction lag. Lane changes: MOBIL. Simplified on purpose; see "What the model leaves out".
 </footer>
 
-<script src="js/highway.js"></script>
-<script src="js/city.js"></script>
+<script src="js/map.js"></script>
+<script src="js/net.js"></script>
+<script src="js/render.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

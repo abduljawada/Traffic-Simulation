@@ -1,16 +1,26 @@
 # Traffic Lab
 
-Interactive traffic simulation: a multi-lane highway loop and a signalised city grid.
-Break the traffic with causes (volume, braking noise, merging, breakdowns, parking cruisers,
-curbside disruptions, bad signals) and test fixes (more lanes, automated cars, variable speed
-limits, ramp metering, adaptive signals, transit, staggered hours). **Run diagnosis** re-runs
-the current setup headlessly over several seeds and ranks each cause/fix by speed gain.
+One interactive metro in a single scheme: a 3-lane highway with three diamond interchanges and a
+river bridge, street overpasses, 2-lane avenues and arterials with signalised junctions, U-turns,
+single-lane local streets, parks, buildings and a river crossed by bridges.
 
-Run: open `index.html` in a browser (no build, no dependencies).
+Break the traffic with causes (demand, commuter tilt, braking noise, following gap, trucks, parking
+cruisers, breakdowns, curbside disruptions, long signal cycles) and test fixes (adaptive or
+coordinated signals, live rerouting, ramp metering, variable speed limits, connected cars, speed
+limit, transit, staggered hours). **Run diagnosis** re-runs the current setup in web workers over
+several seeds and ranks each cause/fix by speed gain.
 
-- `js/highway.js`: IDM car-following + reaction lag, MOBIL lane changing, ramp merge, breakdown.
-- `js/city.js`: IDM on a grid, two-phase fixed / coordinated / adaptive signals, spillback.
-- `js/app.js`: UI, rendering, charts, diagnosis.
+Run: serve the folder (`python3 -m http.server`) and open `index.html`. No build, no dependencies.
+(Diagnosis falls back to the main thread if workers are unavailable, e.g. on `file://`.)
 
-The models are deliberately simple (no induced demand, rerouting, turn conflicts or pedestrians);
-results show direction and rough size, not forecasts.
+Map: drag to pan, wheel or pinch to zoom, tap a road or car for details and to place a breakdown.
+
+- `js/map.js`: network geometry and topology (links, junction movements, lane masks, decor).
+- `js/net.js`: engine: IDM car following with reaction lag, MOBIL lane changes with route-driven
+  mandatory changes, signals (fixed / green wave / adaptive), ramp merge gap acceptance and metering,
+  U-turns, cost-based routing with optional live rerouting. Headless-capable.
+- `js/render.js`: cached static scene + dynamic canvas layer, camera.
+- `js/app.js`: UI, charts, diagnosis. `js/worker.js`: diagnosis worker.
+
+The models are deliberately simple (no induced demand, buses, pedestrians or turn conflicts inside
+junctions); results show direction and rough size, not forecasts.
